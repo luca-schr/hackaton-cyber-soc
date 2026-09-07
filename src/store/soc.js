@@ -63,6 +63,11 @@ function formatClock(date = new Date()) {
   return date.toLocaleTimeString('fr-FR', { hour12: false })
 }
 
+function dataUrl(file) {
+  const base = import.meta.env.BASE_URL || '/'
+  return `${base}data/${file}`
+}
+
 export function pushLog(agent, message, level = 'info') {
   soc.logs.unshift({
     id: ++logSeq,
@@ -87,9 +92,9 @@ export async function loadData() {
   if (soc.loaded) return
   try {
     const [alertsRes, casesRes, intelRes] = await Promise.all([
-      fetch('/data/alerts.json'),
-      fetch('/data/cases.json'),
-      fetch('/data/intel.json'),
+      fetch(dataUrl('alerts.json')),
+      fetch(dataUrl('cases.json')),
+      fetch(dataUrl('intel.json')),
     ])
     if (!alertsRes.ok || !casesRes.ok) {
       throw new Error('Impossible de lire les JSON locaux')

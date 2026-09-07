@@ -9,7 +9,7 @@ import { resetDemo, soc, stopPipeline } from '../store/soc'
     <section class="panel">
       <div class="kv">
         <span>Planification</span><code>toutes les 15 s · retry 3x · backoff 2/4/8 s</code>
-        <span>Source</span><code>/data/alerts.json + /data/cases.json + /data/intel.json</code>
+        <span>Source</span><code>data/alerts.json + cases.json + intel.json (BASE_URL)</code>
         <span>Scope actuel</span><code>{{ soc.config.source }} · {{ soc.config.mode }}</code>
         <span>LLM</span><code>{{ soc.meta.llm }} · aucune clé API · résultats pré-calculés</code>
         <span>Guardrail</span><code>PII filter {{ soc.config.maskPii ? 'ON' : 'OFF (forcé ON)' }} · auto-remediate OFF</code>
