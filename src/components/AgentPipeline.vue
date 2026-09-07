@@ -1,4 +1,5 @@
 <script setup>
+import { AGENT_STATUS } from '../labels'
 import { currentAgent, soc } from '../store/soc'
 
 defineProps({
@@ -19,7 +20,9 @@ defineProps({
         }"
       >
         <div class="name">{{ agent.n }} · {{ agent.label }}</div>
-        <div class="status" :class="'status-' + agent.status">{{ agent.status }}</div>
+        <div class="status" :class="'status-' + agent.status">
+          {{ AGENT_STATUS[agent.status] || agent.status }}
+        </div>
         <div v-if="!compact" class="task">{{ agent.task }}</div>
       </div>
     </div>

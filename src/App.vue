@@ -1,6 +1,6 @@
 <script setup>
 import { onMounted } from 'vue'
-import { loadData, pendingCount, resetDemo, soc, startClock } from './store/soc'
+import { loadData, loginDemo, pendingCount, resetDemo, soc, startClock } from './store/soc'
 import AgentPipeline from './components/AgentPipeline.vue'
 
 onMounted(() => {
@@ -10,26 +10,60 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="shell">
-    <aside class="nav">
+  <div v-if="soc.bootstrapping" class="boot-screen">
+    <div class="boot-inner">
       <div class="brand">
         <small>Checkout SAS</small>
         <strong>Smart Agentic SOC</strong>
       </div>
-      <router-link to="/">Command Center</router-link>
-      <router-link to="/inbox">Inbox <span v-if="pendingCount" class="nav-count">{{ pendingCount }}</span></router-link>
-      <router-link to="/controle">Contrôle</router-link>
+      <div class="boot-bar" aria-hidden="true">
+        <div class="boot-bar-fill"></div>
+      </div>
+      <p class="boot-label">{{ soc.bootLabel }}</p>
+    </div>
+  </div>
+
+  <div v-else-if="!soc.loggedIn" class="login-screen">
+    <form class="login-card" @submit.prevent="loginDemo">
+      <div class="brand">
+        <small>Checkout SAS</small>
+        <strong>Smart Agentic SOC</strong>
+      </div>
+      <p class="meta">Console SOC · eu-west-1</p>
+      <div class="field">
+        <label>E-mail</label>
+        <input type="email" value="l1.analyste@checkout.com" autocomplete="username" />
+      </div>
+      <div class="field">
+        <label>Mot de passe</label>
+        <input type="password" value="CheckoutSOC2026" autocomplete="current-password" />
+      </div>
+      <button class="btn primary login-btn" type="submit" :disabled="soc.loginBusy">
+        <span v-if="soc.loginBusy" class="loader" aria-hidden="true"></span>
+        {{ soc.loginBusy ? 'Connexion…' : 'Se connecter' }}
+      </button>
+    </form>
+  </div>
+
+  <div v-else class="shell">
+    <aside class="nav-side">
+      <div class="brand">
+        <small>Checkout SAS</small>
+        <strong>Smart Agentic SOC</strong>
+      </div>
+      <nav class="nav">
+        <router-link to="/">Dashboard</router-link>
+        <router-link to="/alerts">
+          Alerts
+          <span v-if="pendingCount" class="nav-count">{{ pendingCount }}</span>
+        </router-link>
+        <router-link to="/logs">Logs</router-link>
+        <router-link to="/control">Control</router-link>
+      </nav>
     </aside>
     <div class="main">
       <header class="topbar">
-        <div class="meta">
-          {{ soc.meta.environment || 'DEMO' }} · {{ soc.meta.llm }} · données simulées
-        </div>
-        <div class="pills">
-          <span class="pill live">Live</span>
-          <span class="pill demo">HITL requis</span>
-          <span class="pill mono">{{ soc.clock }}</span>
-        </div>
+        <span class="pill mono">{{ soc.clock }}</span>
       </header>
       <div class="agent-bar">
         <AgentPipeline compact />
@@ -40,7 +74,7 @@ onMounted(() => {
     <button
       class="fab-reset"
       type="button"
-      title="Reset démo"
+      title="Réinitialiser la session"
       :disabled="soc.running"
       @click="resetDemo"
     >

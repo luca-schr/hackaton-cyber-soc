@@ -17,9 +17,9 @@ async function copyTicket() {
     ticket.value.summary,
     '',
     `Source : ${item.value.alertId}`,
-    `Asset : ${item.value.masked.instanceId}`,
-    `IoC : ${item.value.masked.ip}`,
-    `Confiance : ${item.value.confidence}%`,
+    `Ressource : ${item.value.masked.instanceId}`,
+    `Indicateur : ${item.value.masked.ip}`,
+    `Confiance : ${item.value.confidence} %`,
     '',
     'Actions recommandées (non exécutées) :',
     ...ticket.value.actions.map((action, index) => `${index + 1}. ${action}`),
@@ -37,7 +37,7 @@ async function copyTicket() {
   <div class="page" v-if="ticket">
     <section class="panel ticket">
       <div class="pills" style="margin-bottom: 12px">
-        <span class="pill" :style="{ color: 'var(--crit)', borderColor: '#7f1d1d' }">
+        <span class="pill" :style="{ color: 'var(--sev-crit)', borderColor: 'var(--sev-crit)' }">
           {{ ticket.priority }}
         </span>
         <span class="pill">{{ ticket.id }}</span>
@@ -52,10 +52,10 @@ async function copyTicket() {
       <h3>Contexte</h3>
       <div class="kv">
         <span>Source</span><code>{{ item.alertId }}</code>
-        <span>Asset</span><code>{{ item.masked.instanceId }}</code>
-        <span>IoC</span><code>{{ item.masked.ip }} · feed interne</code>
-        <span>Confiance</span><code>{{ item.confidence }}% · Bedrock EU · no-train</code>
-        <span>Case</span><code>{{ route.params.id }}</code>
+        <span>Ressource</span><code>{{ item.masked.instanceId }}</code>
+        <span>Indicateur</span><code>{{ item.masked.ip }} · source interne</code>
+        <span>Confiance</span><code>{{ item.confidence }} % · Bedrock EU · sans entraînement</code>
+        <span>Dossier</span><code>{{ route.params.id }}</code>
       </div>
 
       <h3>Action recommandée (non exécutée)</h3>
@@ -65,17 +65,17 @@ async function copyTicket() {
 
       <div class="actions">
         <button class="btn primary" :disabled="item.sent" @click="simulateSend(route.params.id)">
-          {{ item.sent ? 'Email simulé' : 'Simuler envoi email' }}
+          {{ item.sent ? 'E-mail simulé' : 'Simuler l’envoi d’e-mail' }}
         </button>
         <button class="btn" @click="copyTicket">
           {{ copied ? 'Ticket copié' : 'Copier le ticket' }}
         </button>
-        <router-link class="btn" :to="`/cases/${route.params.id}`">Retour case</router-link>
+        <router-link class="btn" :to="`/cases/${route.params.id}`">Retour au dossier</router-link>
       </div>
     </section>
   </div>
   <div class="page" v-else>
-    <p class="empty">Pas de ticket L2 pour ce case (faux positif ou dossier incomplet).</p>
-    <router-link class="btn" to="/inbox">Inbox</router-link>
+    <p class="empty">Pas de ticket L2 pour ce dossier (faux positif ou dossier incomplet).</p>
+    <router-link class="btn" to="/alerts">Alerts</router-link>
   </div>
 </template>

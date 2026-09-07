@@ -1,12 +1,10 @@
 <script setup>
-import { computed } from 'vue'
 import { useRouter } from 'vue-router'
-import AgentLogs from '../components/AgentLogs.vue'
 import AgentPipeline from '../components/AgentPipeline.vue'
-import { launchWorkflow, queuedAlerts, soc } from '../store/soc'
+import { SEV_LABEL } from '../labels'
+import { launchWorkflow, liveKpis, queuedAlerts, soc } from '../store/soc'
 
 const router = useRouter()
-const preview = computed(() => queuedAlerts.value.slice(0, 4))
 
 async function launch() {
   await launchWorkflow()
@@ -18,32 +16,17 @@ async function launch() {
       return
     }
   }
-  router.push('/inbox')
+  router.push('/alerts')
 }
 </script>
 
 <template>
   <div class="page">
     <div class="kpis">
-      <article class="kpi">
-        <div class="label">Alertes 24h</div>
-        <div class="value mono">{{ soc.kpis.alerts24h?.toLocaleString('fr-FR') }}</div>
-        <div class="hint">GuardDuty · WAF · SIEM</div>
-      </article>
-      <article class="kpi">
-        <div class="label">Faux positifs L1</div>
-        <div class="value mono">{{ soc.kpis.falsePositiveL1Pct }} %</div>
-        <div class="hint">fatigue d’alerte estimée</div>
-      </article>
-      <article class="kpi">
-        <div class="label">MTTD</div>
-        <div class="value mono">{{ soc.kpis.mttdMinutes }} min</div>
-        <div class="hint">vs {{ soc.kpis.mttdBeforeMinutes }} min avant</div>
-      </article>
-      <article class="kpi">
-        <div class="label">Escalades L2</div>
-        <div class="value mono">{{ soc.kpis.escalationsL2 }}</div>
-        <div class="hint">jamais d’auto-exécution</div>
+      <article v-for="kpi in liveKpis" :key="kpi.label" class="kpi">
+        <div class="label">{{ kpi.label }}</div>
+        <div class="value mono">{{ kpi.value }}</div>
+        <div class="hint">{{ kpi.hint }}</div>
       </article>
     </div>
 
@@ -58,48 +41,52 @@ async function launch() {
         <div class="field">
           <label>Source</label>
           <select v-model="soc.config.source" :disabled="soc.running">
-            <option>Tous JSON</option>
-            <option>GuardDuty JSON</option>
-            <option>WAF JSON</option>
-            <option>SIEM JSON</option>
+            <option>Tous</option>
+            <option>GuardDuty</option>
+            <option>WAF</option>
+            <option>SIEM</option>
           </select>
         </div>
         <div class="field">
           <label>Mode</label>
           <select v-model="soc.config.mode" :disabled="soc.running">
-            <option>Batch 10 alertes</option>
-            <option>Alerte unique (star)</option>
+            <option>Lot complet</option>
+            <option>Alerte unique (prioritaire)</option>
           </select>
         </div>
         <label class="check">
           <input v-model="soc.config.maskPii" type="checkbox" />
-          Masquer IP / PII avant LLM
+          Masquer IP et données perso avant le LLM
         </label>
         <label class="check">
           <input type="checkbox" disabled />
-          Auto-remediate (OFF)
+          Remédiation auto (désactivée)
         </label>
-        <button class="btn primary" :disabled="soc.running || soc.stopped || soc.launched" @click="launch">
+        <button
+          class="btn primary"
+          :disabled="soc.running || soc.stopped || soc.launched || !soc.alerts.length"
+          @click="launch"
+        >
           {{ soc.running ? 'Exécution…' : soc.launched ? 'Déjà lancé' : 'Lancer le workflow' }}
         </button>
       </div>
     </section>
 
     <section class="panel">
-      <h2>File d’attente · {{ queuedAlerts.length }} dans le scope</h2>
+      <h2>Alertes · {{ queuedAlerts.length }} dans le périmètre</h2>
       <table>
         <thead>
           <tr>
             <th>Sévérité</th>
             <th>Source</th>
             <th>Type</th>
-            <th>Asset</th>
+            <th>Ressource</th>
             <th>Reçu</th>
           </tr>
         </thead>
         <tbody>
-          <tr v-for="alert in preview" :key="alert.id" :class="{ star: alert.star }">
-            <td class="sev" :class="alert.severity">{{ alert.severity }}</td>
+          <tr v-for="alert in queuedAlerts" :key="alert.id" :class="{ star: alert.star }">
+            <td class="sev" :class="alert.severity">{{ SEV_LABEL[alert.severity] || alert.severity }}</td>
             <td>{{ alert.source }}</td>
             <td>{{ alert.type }}</td>
             <td class="mono">{{ alert.asset }}</td>
@@ -107,11 +94,6 @@ async function launch() {
           </tr>
         </tbody>
       </table>
-    </section>
-
-    <section class="panel">
-      <h2>Logs agents</h2>
-      <AgentLogs :rows="soc.logs" :limit="8" />
     </section>
   </div>
 </template>
