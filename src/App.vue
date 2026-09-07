@@ -1,6 +1,7 @@
 <script setup>
 import { onMounted } from 'vue'
 import { loadData, pendingCount, resetDemo, soc, startClock } from './store/soc'
+import AgentPipeline from './components/AgentPipeline.vue'
 
 onMounted(() => {
   startClock()
@@ -30,6 +31,9 @@ onMounted(() => {
           <span class="pill mono">{{ soc.clock }}</span>
         </div>
       </header>
+      <div class="agent-bar">
+        <AgentPipeline compact />
+      </div>
       <p v-if="soc.error" class="banner warn" style="margin: 16px 24px 0">{{ soc.error }}</p>
       <router-view />
     </div>

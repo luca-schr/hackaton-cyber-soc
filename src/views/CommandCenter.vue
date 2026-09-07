@@ -2,6 +2,7 @@
 import { computed } from 'vue'
 import { useRouter } from 'vue-router'
 import AgentLogs from '../components/AgentLogs.vue'
+import AgentPipeline from '../components/AgentPipeline.vue'
 import { launchWorkflow, queuedAlerts, soc } from '../store/soc'
 
 const router = useRouter()
@@ -48,12 +49,7 @@ async function launch() {
 
     <section class="panel">
       <h2>Pipeline agents</h2>
-      <div class="pipeline">
-        <div v-for="agent in soc.agents" :key="agent.id" class="agent">
-          <div class="name">{{ agent.label }}</div>
-          <div class="status" :class="'status-' + agent.status">{{ agent.status }}</div>
-        </div>
-      </div>
+      <AgentPipeline />
     </section>
 
     <section class="panel">

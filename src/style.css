@@ -104,6 +104,18 @@ a {
   border-bottom: 1px solid var(--line);
 }
 
+.agent-bar {
+  padding: 10px 24px 8px;
+  border-bottom: 1px solid var(--line);
+  background: #0e1524;
+}
+
+.pipeline-now {
+  margin: 8px 0 0;
+  color: var(--warn);
+  font-size: 12px;
+}
+
 .topbar .meta,
 .page .meta {
   color: var(--muted);
@@ -273,11 +285,28 @@ input[type='text'] {
   flex-wrap: wrap;
 }
 
+.pipeline.compact {
+  gap: 6px;
+}
+
 .agent {
   border: 1px solid var(--line);
   padding: 10px 12px;
   min-width: 120px;
   background: var(--bg);
+}
+
+.pipeline.compact .agent {
+  min-width: 0;
+  padding: 6px 10px;
+}
+
+.agent.is-run {
+  border-color: #b45309;
+}
+
+.agent.is-ok {
+  border-color: #14532d;
 }
 
 .agent .name {
@@ -289,6 +318,17 @@ input[type='text'] {
   margin-top: 4px;
   font-size: 13px;
   font-weight: 600;
+}
+
+.agent .task {
+  margin-top: 4px;
+  font-size: 11px;
+  color: var(--idle);
+}
+
+.pipeline.compact .agent .status {
+  font-size: 11px;
+  margin-top: 2px;
 }
 
 .status-OK,
@@ -362,8 +402,21 @@ tr.star td:first-child {
   background: var(--bg);
 }
 
+.step.queued {
+  opacity: 0.45;
+}
+
+.step.done {
+  opacity: 1;
+}
+
 .step.highlight {
   border-color: #134e4a;
+}
+
+.step.running {
+  border-color: #b45309;
+  opacity: 1;
 }
 
 .step .who {

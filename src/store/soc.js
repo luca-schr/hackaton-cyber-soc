@@ -1,11 +1,11 @@
 import { computed, reactive } from 'vue'
 
 const AGENT_DEFS = [
-  { id: 'scheduler', label: 'Scheduler' },
-  { id: 'extract', label: 'Extract' },
-  { id: 'intel', label: 'Threat Intel' },
-  { id: 'llm', label: 'Analyse LLM' },
-  { id: 'notify', label: 'Notify' },
+  { id: 'scheduler', n: 'A4', label: 'Scheduler', task: 'Poll JSON' },
+  { id: 'extract', n: 'A1', label: 'Extract', task: 'IP · UA · asset' },
+  { id: 'intel', n: 'A2', label: 'Threat Intel', task: 'IoC · keywords' },
+  { id: 'llm', n: 'A2b', label: 'Analyse LLM', task: 'Verdict masqué' },
+  { id: 'notify', n: 'A3', label: 'Notify', task: 'Ticket L2 · HITL' },
 ]
 
 const SOURCE_MAP = {
@@ -32,6 +32,7 @@ export const soc = reactive({
   alerts: [],
   cases: {},
   agents: AGENT_DEFS.map((a) => ({ ...a, status: 'IDLE' })),
+  currentAgentId: '',
   config: {
     source: 'Tous JSON',
     mode: 'Batch 10 alertes',
@@ -133,9 +134,24 @@ export function sleep(ms) {
 }
 
 function setAgent(id, status) {
+  if (status === 'RUN' || status === 'WAIT') {
+    soc.agents.forEach((agent) => {
+      if (agent.id !== id && (agent.status === 'RUN' || agent.status === 'WAIT')) {
+        agent.status = 'OK'
+      }
+    })
+    soc.currentAgentId = id
+  }
   const agent = soc.agents.find((item) => item.id === id)
   if (agent) agent.status = status
+  if (status !== 'RUN' && status !== 'WAIT' && soc.currentAgentId === id) {
+    soc.currentAgentId = ''
+  }
 }
+
+export const currentAgent = computed(
+  () => soc.agents.find((agent) => agent.id === soc.currentAgentId) || null,
+)
 
 export const queuedAlerts = computed(() => {
   const starMode = soc.config.mode.includes('unique')
@@ -195,6 +211,7 @@ export function resetDemo() {
   soc.agents.forEach((agent) => {
     agent.status = 'IDLE'
   })
+  soc.currentAgentId = ''
   applySnapshot()
   pushLog('scheduler', 'Démo réinitialisée — file d’alertes rechargée', 'ok')
 }
@@ -211,53 +228,62 @@ export async function launchWorkflow() {
     'ok',
   )
   setAgent('scheduler', 'RUN')
-  await sleep(350)
+  await sleep(900)
   if (soc.stopped) return
   setAgent('scheduler', 'OK')
 
   setAgent('extract', 'RUN')
-  await sleep(220)
-
   for (const alert of batch) {
     if (soc.stopped) return
     alert.agentLabel = 'Extract…'
     pushLog('extract', `${alert.id} · ${alert.type} · ${alert.asset}`)
-    await sleep(140)
-    const hint = intelHint(alert)
-    setAgent('intel', 'RUN')
-    pushLog('intel', `${alert.id} · ${hint}`)
-    await sleep(90)
-    setAgent('intel', 'OK')
+    await sleep(280)
+  }
+  setAgent('extract', 'OK')
 
+  setAgent('intel', 'RUN')
+  for (const alert of batch) {
+    if (soc.stopped) return
+    const hint = intelHint(alert)
+    alert.agentLabel = 'Intel…'
+    pushLog('intel', `${alert.id} · ${hint}`)
+    await sleep(280)
+  }
+  setAgent('intel', 'OK')
+
+  setAgent('llm', 'WAIT')
+  await sleep(400)
+  setAgent('llm', 'RUN')
+  for (const alert of batch) {
+    if (soc.stopped) return
+    alert.agentLabel = 'LLM…'
     if (soc.config.maskPii) {
-      setAgent('llm', 'WAIT')
       pushLog('llm', `${alert.id} · payload masqué (PII stripped)`, 'ok')
     } else {
-      setAgent('llm', 'WAIT')
       pushLog(
         'llm',
         `${alert.id} · masquage opérateur OFF — guardrail force le strip PII`,
         'warn',
       )
     }
-    await sleep(80)
-    setAgent('llm', 'OK')
+    await sleep(320)
+  }
+  setAgent('llm', 'OK')
 
+  setAgent('notify', 'RUN')
+  for (const alert of batch) {
+    if (soc.stopped) return
     const outcome = classifyAlert(alert)
     if (outcome === 'ready') {
-      setAgent('notify', 'OK')
       pushLog('notify', `${alert.id} · case prêt · ticket proposé (HITL)`, 'ok')
     } else {
-      setAgent('notify', 'IDLE')
       pushLog('notify', `${alert.id} · ${alert.agentLabel} · pas de ticket`)
     }
+    await sleep(220)
   }
-
   if (!soc.stopped) {
-    setAgent('extract', 'OK')
-    setAgent('intel', 'OK')
-    setAgent('llm', 'OK')
     const ready = batch.filter((alert) => alert.status === 'ready').length
+    setAgent('notify', ready ? 'OK' : 'IDLE')
     pushLog('scheduler', `Batch terminé · ${ready} case(s) à ouvrir · auto-remediate OFF`, 'ok')
   }
 
@@ -270,7 +296,6 @@ export async function playCase(caseId) {
   if (item.played) return
 
   item.playing = true
-  item.hitl = 'pending'
   pushLog('scheduler', `Case ${caseId} · replay timeline agents`)
 
   for (const step of item.steps) {
@@ -289,11 +314,12 @@ export async function playCase(caseId) {
     } else {
       pushLog(mapped === 'extract' && step.id === 'mask' ? 'extract' : mapped, step.summary)
     }
-    await sleep(step.delayMs || 700)
+    await sleep(Math.max(step.delayMs || 700, 1100))
     step.status = 'ok'
     if (['scheduler', 'extract', 'intel', 'llm', 'notify'].includes(mapped)) {
       setAgent(mapped, 'OK')
     }
+    await sleep(280)
   }
 
   const alert = soc.alerts.find((row) => row.caseId === caseId)
@@ -304,6 +330,7 @@ export async function playCase(caseId) {
 
   item.played = true
   item.playing = false
+  item.hitl = item.ticket ? 'pending' : 'idle'
 }
 
 export function markFalsePositive(caseId) {

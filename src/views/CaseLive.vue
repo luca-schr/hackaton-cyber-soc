@@ -32,6 +32,14 @@ const maskNote = computed(() =>
     : 'Masquage opérateur OFF — guardrail a quand même strippé la PII (fail securely)',
 )
 
+function stepOk(id) {
+  return item.value?.steps?.find((step) => step.id === id)?.status === 'ok'
+}
+
+function stepRun(id) {
+  return item.value?.steps?.find((step) => step.id === id)?.status === 'run'
+}
+
 onMounted(() => playCase(route.params.id))
 watch(
   () => route.params.id,
@@ -72,7 +80,7 @@ function reject() {
             v-for="step in item.steps"
             :key="step.id"
             class="step"
-            :class="{ highlight: step.highlight }"
+            :class="{ highlight: step.highlight, running: step.status === 'run', done: step.status === 'ok', queued: step.status === 'queued' }"
           >
             <div class="who">
               {{ step.time }} · {{ step.agent }}
@@ -84,27 +92,51 @@ function reject() {
       </section>
 
       <section class="panel">
-        <h2>Preuve · masquage avant LLM</h2>
-        <p class="meta">{{ maskNote }}</p>
-        <div class="compare">
-          <div>
-            <div class="label">Avant</div>
-            <pre class="pre mono">{{ JSON.stringify(item.raw, null, 2) }}</pre>
+        <h2>Preuve par agent</h2>
+        <p class="meta" v-if="!stepOk('extract')">En attente de l’extract…</p>
+
+        <template v-if="stepOk('extract')">
+          <div class="label">A1 · Extract (brut)</div>
+          <pre class="pre mono">{{ JSON.stringify(item.raw, null, 2) }}</pre>
+        </template>
+
+        <template v-if="stepOk('mask') || stepRun('mask')">
+          <h2 style="margin-top: 16px">A1b · Masquage avant LLM</h2>
+          <p class="meta">{{ maskNote }}</p>
+          <div class="compare">
+            <div>
+              <div class="label">Avant</div>
+              <pre class="pre mono">{{ JSON.stringify(item.raw, null, 2) }}</pre>
+            </div>
+            <div>
+              <div class="label">Après (envoyé au LLM)</div>
+              <pre class="pre mono">{{ JSON.stringify(llmPayload, null, 2) }}</pre>
+            </div>
           </div>
-          <div>
-            <div class="label">Après (envoyé au LLM)</div>
-            <pre class="pre mono">{{ JSON.stringify(llmPayload, null, 2) }}</pre>
+        </template>
+
+        <template v-if="stepOk('intel')">
+          <h2 style="margin-top: 16px">A2 · Threat intel</h2>
+          <div class="kv">
+            <span>Hits</span>
+            <code>{{ (item.intel?.hits || []).join(' · ') || 'aucun' }}</code>
+            <span>Mots-clés</span>
+            <code>{{ (item.intel?.keywords || []).join(' · ') || 'aucun' }}</code>
           </div>
-        </div>
-        <h2 style="margin-top: 16px">Threat intel</h2>
-        <div class="kv">
-          <span>Hits</span>
-          <code>{{ (item.intel?.hits || []).join(' · ') || 'aucun' }}</code>
-          <span>Mots-clés</span>
-          <code>{{ (item.intel?.keywords || []).join(' · ') || 'aucun' }}</code>
-        </div>
-        <h2 style="margin-top: 16px">Verdict</h2>
-        <p>{{ item.verdict }}</p>
+        </template>
+
+        <template v-if="stepOk('llm')">
+          <h2 style="margin-top: 16px">A2b · Verdict LLM</h2>
+          <p>{{ item.verdict }}</p>
+        </template>
+
+        <template v-if="stepOk('notify')">
+          <h2 style="margin-top: 16px">A3 · Notify</h2>
+          <p class="meta">
+            {{ item.ticket ? 'Ticket L2 proposé · exécution bloquée (HITL)' : 'Pas d’escalade · clos côté L1' }}
+          </p>
+        </template>
+
         <h2 style="margin-top: 16px">Logs case</h2>
         <AgentLogs :rows="caseLogs" :limit="6" />
       </section>
