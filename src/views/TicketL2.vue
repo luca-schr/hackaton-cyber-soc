@@ -1,12 +1,25 @@
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
-import { simulateSend, soc } from '../store/soc'
+import { confirmL2Send, inspectTicket, playCase, soc } from '../store/soc'
 
 const route = useRoute()
 const copied = ref(false)
 const item = computed(() => soc.cases[route.params.id])
 const ticket = computed(() => item.value?.ticket)
+
+async function syncTicket() {
+  await playCase(route.params.id)
+  inspectTicket(route.params.id)
+}
+
+function confirmSend() {
+  if (!item.value?.played || item.value?.playing) return
+  if (!confirmL2Send(route.params.id)) return
+}
+
+onMounted(syncTicket)
+watch(() => route.params.id, syncTicket)
 
 async function copyTicket() {
   if (!ticket.value || !item.value) return
@@ -41,7 +54,9 @@ async function copyTicket() {
           {{ ticket.priority }}
         </span>
         <span class="pill">{{ ticket.id }}</span>
-        <span class="pill" v-if="item.sent">Envoyé (simulé)</span>
+        <span class="pill live" v-if="item.sent">E-mail L2 transmis</span>
+        <span class="pill attention" v-else-if="item.playing">Analyse…</span>
+        <span class="pill attention" v-else-if="item.played">Brouillon · non transmis</span>
       </div>
       <h1>{{ ticket.subject }}</h1>
       <p class="meta">À : {{ ticket.to }}</p>
@@ -64,8 +79,13 @@ async function copyTicket() {
       </ol>
 
       <div class="actions">
-        <button class="btn primary" :disabled="item.sent" @click="simulateSend(route.params.id)">
-          {{ item.sent ? 'E-mail simulé' : 'Simuler l’envoi d’e-mail' }}
+        <button
+          v-if="!item.sent"
+          class="btn ok"
+          :disabled="!item.played || item.playing"
+          @click="confirmSend"
+        >
+          {{ item.playing ? 'Analyse…' : 'Confirmer l’envoi L2' }}
         </button>
         <button class="btn" @click="copyTicket">
           {{ copied ? 'Ticket copié' : 'Copier le ticket' }}

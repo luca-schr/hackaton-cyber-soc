@@ -64,6 +64,11 @@ a {
   font-family: Tahoma, "Segoe UI", Geneva, sans-serif;
   font-size: 13px;
   font-weight: 400;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  align-self: start;
+  overflow: auto;
 }
 
 .topbar {
@@ -118,9 +123,20 @@ a {
 }
 
 .agent-bar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
   padding: 10px 24px 8px;
   border-bottom: 1px solid var(--line);
   background: var(--side);
+  min-width: 0;
+  position: sticky;
+  top: 0;
+  z-index: 12;
+}
+
+.agent-bar > div {
   min-width: 0;
   overflow-x: auto;
 }
@@ -277,12 +293,29 @@ input[type='password'] {
   min-width: 180px;
 }
 
-.btn {
+.btn,
+a.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   background: var(--bg);
   color: var(--text);
   border: 1px solid var(--line);
   padding: 9px 14px;
   cursor: pointer;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.2;
+  text-decoration: none;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.btn:hover:not(:disabled),
+a.btn:hover {
+  background: var(--panel-2);
+  border-color: var(--info);
+  color: var(--text);
 }
 
 .btn:disabled {
@@ -296,10 +329,22 @@ input[type='password'] {
   color: #bbbbbb;
 }
 
+.btn.primary:hover:not(:disabled),
+a.btn.primary:hover {
+  background: #5214ff;
+  border-color: #00dfff;
+  color: #ffffff;
+}
+
 .btn.ok {
   background: var(--ok);
   border-color: var(--ok);
   color: #242424;
+}
+
+.btn.ok:hover:not(:disabled) {
+  background: #5dff4d;
+  border-color: #15fd00;
 }
 
 .fab-reset {
@@ -527,6 +572,49 @@ tr.star td:first-child {
   color: var(--info);
 }
 
+.fold-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  background: none;
+  border: 0;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+}
+
+.fold-toggle h2 {
+  margin: 0;
+}
+
+.fold-toggle:hover h2 {
+  color: var(--info);
+}
+
+.fold-toggle:hover .fold-arrow {
+  color: var(--info);
+}
+
+.fold-arrow {
+  flex-shrink: 0;
+  color: var(--muted);
+  transition: transform 0.15s ease, color 0.15s ease;
+}
+
+.fold-arrow.open {
+  transform: rotate(90deg);
+  color: var(--info);
+}
+
+.fold-body {
+  margin-top: 12px;
+}
+
 .actions {
   display: flex;
   gap: 8px;
@@ -691,17 +779,41 @@ tr.star td:first-child {
     grid-template-columns: 1fr;
   }
   .nav-side {
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    height: auto;
+    overflow-x: auto;
+    overflow-y: hidden;
     display: flex;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
     align-items: center;
-    gap: 8px;
+    gap: 12px;
+    padding: 8px 12px;
+    border-right: none;
+    border-bottom: 1px solid var(--line);
+    scrollbar-width: thin;
   }
   .brand {
-    padding: 0 8px 0 0;
+    padding: 0;
+    flex: 0 0 auto;
+  }
+  .brand small {
+    display: none;
   }
   .nav {
     flex-direction: row;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
+    flex: 1 0 auto;
+    gap: 4px;
+  }
+  .nav a {
+    flex: 0 0 auto;
+    white-space: nowrap;
+  }
+  .agent-bar {
+    top: 48px;
+    z-index: 19;
   }
   .kpis,
   .split,

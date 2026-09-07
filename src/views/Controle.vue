@@ -1,5 +1,12 @@
 <script setup>
+import { useRouter } from 'vue-router'
 import { soc, stopPipeline } from '../store/soc'
+
+const router = useRouter()
+
+function openTicket(row) {
+  router.push(`/tickets/${row.caseId}`)
+}
 </script>
 
 <template>
@@ -7,13 +14,12 @@ import { soc, stopPipeline } from '../store/soc'
     <h1>Control · Agent 4 Planificateur</h1>
     <section class="panel">
       <div class="kv">
-        <span>Planification</span><code>toutes les 15 s · 3 tentatives · délai 2/4/8 s</code>
         <span>Source</span>
-        <code>{{ soc.alerts.length }} alertes simulées (GuardDuty · WAF · SIEM)</code>
-        <span>Périmètre actuel</span><code>{{ soc.config.source }} · {{ soc.config.mode }}</code>
-        <span>LLM</span><code>{{ soc.meta.llm }} · aucune clé API · résultats pré-calculés</code>
-        <span>Garde-fou</span><code>filtre données perso {{ soc.config.maskPii ? 'activé' : 'désactivé (forcé activé)' }} · remédiation auto désactivée</code>
-        <span>Échec sécurisé</span><code>si le pipeline est stoppé → aucun envoi de contenu brut</code>
+        <code>{{ soc.alerts.length }} alertes · GuardDuty · WAF · SIEM</code>
+        <span>Périmètre</span><code>{{ soc.config.source }}</code>
+        <span>LLM</span><code>{{ soc.meta.llm }} · résidence EU · sans entraînement</code>
+        <span>Garde-fou</span><code>données perso {{ soc.config.maskPii ? 'masquées' : 'masquage forcé' }} · remédiation auto off</code>
+        <span>Échec sécurisé</span><code>pipeline stoppé → aucun contenu brut envoyé</code>
       </div>
       <div class="actions">
         <button class="btn primary" :disabled="soc.stopped" @click="stopPipeline">Arrêter le pipeline</button>
@@ -21,8 +27,8 @@ import { soc, stopPipeline } from '../store/soc'
     </section>
 
     <section class="panel">
-      <h2>Tickets simulés cette session</h2>
-      <p v-if="!soc.sentTickets.length" class="empty">Aucun envoi simulé pour l’instant.</p>
+      <h2>Tickets L2 cette session</h2>
+      <p v-if="!soc.sentTickets.length" class="empty">Aucun ticket L2 transmis pour l’instant.</p>
       <table v-else>
         <thead>
           <tr>
@@ -32,7 +38,12 @@ import { soc, stopPipeline } from '../store/soc'
           </tr>
         </thead>
         <tbody>
-          <tr v-for="row in soc.sentTickets" :key="row.id">
+          <tr
+            v-for="row in soc.sentTickets"
+            :key="row.id"
+            class="clickable"
+            @click="openTicket(row)"
+          >
             <td class="mono">{{ row.id }}</td>
             <td class="mono">{{ row.caseId }}</td>
             <td class="mono">{{ row.at }}</td>

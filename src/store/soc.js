@@ -35,7 +35,6 @@ export const soc = reactive({
   currentAgentId: '',
   config: {
     source: 'Tous',
-    mode: 'Lot complet',
     maskPii: true,
     autoRemediate: false,
   },
@@ -112,7 +111,7 @@ export async function loadData() {
     bundledSnapshot = clone(snapshot)
     applySnapshot()
     soc.loaded = true
-    pushLog('scheduler', `Démarrage · ${alerts.length} alertes simulées`, 'ok')
+    pushLog('scheduler', `Démarrage · ${alerts.length} alertes en file`, 'ok')
   } catch (err) {
     soc.error = err.message || 'Chargement JSON échoué'
   }
@@ -153,11 +152,26 @@ export const currentAgent = computed(
 )
 
 export const queuedAlerts = computed(() => {
-  const starMode = soc.config.mode.includes('unique')
-  if (starMode) return soc.alerts.filter((alert) => alert.star)
   const source = SOURCE_MAP[soc.config.source]
   if (!source) return soc.alerts
   return soc.alerts.filter((alert) => alert.source === source)
+})
+
+const SEV_RANK = { CRITICAL: 0, HIGH: 1, MEDIUM: 2, LOW: 3 }
+
+export const attentionAlerts = computed(() => {
+  const done = ['ignored', 'false_positive', 'closed', 'escalated']
+  return queuedAlerts.value
+    .filter(
+      (alert) =>
+        (alert.severity === 'CRITICAL' || alert.severity === 'HIGH') &&
+        !done.includes(alert.status),
+    )
+    .sort((a, b) => {
+      if (a.star !== b.star) return a.star ? -1 : 1
+      const gap = (SEV_RANK[a.severity] ?? 9) - (SEV_RANK[b.severity] ?? 9)
+      return gap !== 0 ? gap : b.score - a.score
+    })
 })
 
 function classifyAlert(alert) {
@@ -278,8 +292,8 @@ function stubCase(alert) {
       { id: 'extract', agent: 'Agent 1 · Extraction', time: alert.receivedAt, summary: `Ressource ${alert.asset} · type ${alert.type}`, delayMs: 800 },
       { id: 'mask', agent: 'Masquage · sécurité dès la conception', time: alert.receivedAt, summary: `${ip} → ${maskIp(ip)}`, highlight: true, delayMs: 800 },
       { id: 'intel', agent: 'Agent 2 · Analyse', time: alert.receivedAt, summary: escalate ? `Priorité ${alert.severity} · ${alert.type}` : `Bruit probable · ${alert.type}`, delayMs: 800 },
-      { id: 'llm', agent: 'Agent 2b · Analyse LLM', time: alert.receivedAt, summary: 'Verdict simulé (données masquées)', delayMs: 1000 },
-      { id: 'notify', agent: 'Agent 3 · Notification', time: alert.receivedAt, summary: ticketId ? 'Ticket L2 proposé · validation' : 'Pas d’escalade', delayMs: 700 },
+      { id: 'llm', agent: 'Agent 2b · Analyse LLM', time: alert.receivedAt, summary: 'Verdict · données masquées', delayMs: 1000 },
+      { id: 'notify', agent: 'Agent 3 · Notification', time: alert.receivedAt, summary: ticketId ? 'Ticket L2 rédigé · confirmation requise' : 'Pas d’escalade', delayMs: 700 },
     ],
     ticket: ticketId
       ? {
@@ -343,7 +357,7 @@ export function resetDemo() {
   snapshot.alerts = alerts
   snapshot.cases = casesFromAlerts(alerts)
   reloadFromSnapshot()
-  pushLog('scheduler', 'Démo réinitialisée — file d’alertes rechargée', 'ok')
+  pushLog('scheduler', 'Session réinitialisée — file rechargée', 'ok')
 }
 
 export async function loginDemo() {
@@ -375,7 +389,7 @@ export async function launchWorkflow() {
 
   pushLog(
     'scheduler',
-    `Ingestion ${soc.config.source} · ${soc.config.mode} · ${batch.length} alerte(s)`,
+    `Ingestion ${soc.config.source} · ${batch.length} alerte(s)`,
     'ok',
   )
   setAgent('scheduler', 'RUN')
@@ -426,7 +440,7 @@ export async function launchWorkflow() {
     if (soc.stopped) return
     const outcome = classifyAlert(alert)
     if (outcome === 'ready') {
-      pushLog('notify', `${alert.id} · dossier prêt · ticket proposé`, 'ok')
+      pushLog('notify', `${alert.id} · ticket L2 rédigé`, 'ok')
     } else {
       pushLog('notify', `${alert.id} · ${alert.agentLabel} · pas de ticket`)
     }
@@ -473,7 +487,7 @@ export async function playCase(caseId) {
   }
 
   item.playing = true
-  pushLog('scheduler', `Dossier ${caseId} · analyse unitaire`)
+  pushLog('scheduler', `${item.alertId} · analyse du dossier`)
 
   for (const step of item.steps) {
     if (soc.stopped) {
@@ -489,19 +503,21 @@ export async function playCase(caseId) {
     if (step.id === 'mask' && !soc.config.maskPii) {
       pushLog('extract', `${item.alertId} · guardrail masquage forcé`, 'warn')
     } else {
-      pushLog(mapped === 'extract' && step.id === 'mask' ? 'extract' : mapped, step.summary)
+      pushLog(
+        mapped === 'extract' && step.id === 'mask' ? 'extract' : mapped,
+        step.summary,
+      )
     }
-    await sleep(Math.max(step.delayMs || 700, 1100))
+    await sleep(step.delayMs || 600)
     step.status = 'ok'
     if (['scheduler', 'extract', 'intel', 'llm', 'notify'].includes(mapped)) {
       setAgent(mapped, 'OK')
     }
-    await sleep(280)
   }
 
   if (alert) {
     alert.status = item.ticket ? 'awaiting_l2' : 'closed'
-    alert.agentLabel = item.ticket ? 'Attention L2' : 'Clos · faux positif'
+    alert.agentLabel = item.ticket ? 'Attention L2' : 'Clos · L1'
   }
 
   item.played = true
@@ -521,28 +537,35 @@ export function markFalsePositive(caseId) {
   pushLog('notify', `${item.alertId} · classé faux positif L2`)
 }
 
-export function approveEscalation(caseId) {
+export function inspectTicket(caseId) {
   const item = soc.cases[caseId]
-  if (!item || !item.ticket) return
-  item.hitl = 'approved'
+  if (!item?.ticket || !item.sent) return
+  item.hitl = 'notified'
   const alert = soc.alerts.find((row) => row.caseId === caseId)
-  if (alert) {
+  if (alert && ['ready', 'awaiting_l2'].includes(alert.status)) {
     alert.status = 'escalated'
-    alert.agentLabel = 'Escaladé L2'
+    alert.agentLabel = 'Ticket L2'
   }
-  pushLog('notify', `${item.ticket.id} · escalade L2 approuvée`, 'ok')
 }
 
-export function simulateSend(caseId) {
+export function confirmL2Send(caseId) {
+  const item = soc.cases[caseId]
+  if (!item?.ticket || item.sent) return false
+  transmitL2Email(caseId)
+  inspectTicket(caseId)
+  return true
+}
+
+export function transmitL2Email(caseId) {
   const item = soc.cases[caseId]
   if (!item?.ticket || item.sent) return
   item.sent = true
   soc.sentTickets.unshift({
     id: item.ticket.id,
     caseId,
-    at: new Date().toISOString(),
+    at: soc.clock === '--:--:--' ? formatClock() : soc.clock,
   })
-  pushLog('notify', `${item.ticket.id} · e-mail L2 simulé (pas d’SMTP réel)`, 'ok')
+  pushLog('notify', `${item.ticket.id} · e-mail L2 transmis`, 'ok')
 }
 
 export const pendingCount = computed(

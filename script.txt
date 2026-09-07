@@ -1,0 +1,21 @@
+Parcours démo (jury) — un seul fil, ~3 min
+
+1. Login → loader console → Dashboard
+   File réelle, haute priorité. Pas de chiffres brochure.
+   À traiter en priorité (HIGH/CRITICAL, cliquable).
+   Clic dossier sans lot : analyse factice → Escalade L2 / faux positif.
+
+2. Lancer le workflow (lot)
+   Barre agents A4→A1→A2→A2b LLM→A3.
+   LLM : masquage, verdict, ticket rédigé pour HIGH/CRITICAL.
+   LOW ignorées L1, MEDIUM classées FP. Isolation jamais exécutée.
+
+3. Après le lot, ouvrir GD-9000
+   Preuves déjà là (pas de re-scan).
+   Escalade L2 = relire le ticket → Confirmer l’envoi.
+
+Contrast 30 s : Alerts, bas de liste (faibles ignorées).
+
+Sécu 20 s (Q/R) : masquage avant/après ; Control → arrêter le pipeline.
+
+Ne pas faire : analyser une alerte avant le lot, rejouer le LLM, import JSON.

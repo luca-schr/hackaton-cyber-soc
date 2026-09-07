@@ -1,22 +1,19 @@
 <script setup>
 import { useRouter } from 'vue-router'
-import AgentPipeline from '../components/AgentPipeline.vue'
 import { SEV_LABEL } from '../labels'
-import { launchWorkflow, liveKpis, queuedAlerts, soc } from '../store/soc'
+import { attentionAlerts, launchWorkflow, liveKpis, queuedAlerts, soc } from '../store/soc'
 
 const router = useRouter()
 
 async function launch() {
   await launchWorkflow()
   if (soc.stopped) return
-  if (soc.config.mode.includes('unique')) {
-    const star = soc.alerts.find((alert) => alert.star)
-    if (star) {
-      router.push(`/cases/${star.caseId}`)
-      return
-    }
-  }
   router.push('/alerts')
+}
+
+function openAlert(alert) {
+  if (!alert?.caseId) return
+  router.push(`/cases/${alert.caseId}`)
 }
 </script>
 
@@ -31,8 +28,37 @@ async function launch() {
     </div>
 
     <section class="panel">
-      <h2>Pipeline agents</h2>
-      <AgentPipeline />
+      <h2>À traiter en priorité · {{ attentionAlerts.length }}</h2>
+      <p class="meta" style="margin: -4px 0 12px">HIGH · CRITICAL — le LLM rédige le ticket, L1 confirme l’envoi</p>
+      <table>
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Sévérité</th>
+            <th>Source</th>
+            <th>Type</th>
+            <th>Ressource</th>
+            <th>Reçu</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr
+            v-for="alert in attentionAlerts"
+            :key="alert.id"
+            class="clickable"
+            :class="{ star: alert.star }"
+            @click="openAlert(alert)"
+          >
+            <td class="mono">{{ alert.id }}</td>
+            <td class="sev" :class="alert.severity">{{ SEV_LABEL[alert.severity] || alert.severity }}</td>
+            <td>{{ alert.source }}</td>
+            <td>{{ alert.type }}</td>
+            <td class="mono">{{ alert.asset }}</td>
+            <td class="mono">{{ alert.receivedAt }}</td>
+          </tr>
+        </tbody>
+      </table>
+      <p v-if="!attentionAlerts.length" class="empty">Aucune alerte haute priorité dans le périmètre.</p>
     </section>
 
     <section class="panel">
@@ -45,13 +71,6 @@ async function launch() {
             <option>GuardDuty</option>
             <option>WAF</option>
             <option>SIEM</option>
-          </select>
-        </div>
-        <div class="field">
-          <label>Mode</label>
-          <select v-model="soc.config.mode" :disabled="soc.running">
-            <option>Lot complet</option>
-            <option>Alerte unique (prioritaire)</option>
           </select>
         </div>
         <label class="check">
@@ -77,6 +96,7 @@ async function launch() {
       <table>
         <thead>
           <tr>
+            <th>ID</th>
             <th>Sévérité</th>
             <th>Source</th>
             <th>Type</th>
@@ -85,7 +105,14 @@ async function launch() {
           </tr>
         </thead>
         <tbody>
-          <tr v-for="alert in queuedAlerts" :key="alert.id" :class="{ star: alert.star }">
+          <tr
+            v-for="alert in queuedAlerts"
+            :key="alert.id"
+            class="clickable"
+            :class="{ star: alert.star }"
+            @click="openAlert(alert)"
+          >
+            <td class="mono">{{ alert.id }}</td>
             <td class="sev" :class="alert.severity">{{ SEV_LABEL[alert.severity] || alert.severity }}</td>
             <td>{{ alert.source }}</td>
             <td>{{ alert.type }}</td>

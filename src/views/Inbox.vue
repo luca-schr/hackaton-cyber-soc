@@ -52,7 +52,7 @@ function openCase() {
   <div class="page">
     <h1>Alerts · {{ openAlerts.length }} en file</h1>
     <div v-if="!soc.launched" class="banner">
-      Lancez le workflow depuis le Dashboard pour simuler l’ingestion.
+      Lancez le workflow depuis le Dashboard pour ingérer la file.
     </div>
 
     <section class="panel filters">
@@ -147,8 +147,15 @@ function openCase() {
         <p v-else class="empty">Pas de dossier détaillé.</p>
         <div class="actions">
           <button class="btn primary" :disabled="!selectedCase" @click="openCase">
-            Ouvrir le dossier
+            {{ soc.launched ? 'Voir le dossier' : 'Ouvrir le dossier' }}
           </button>
+          <router-link
+            v-if="soc.launched && selectedCase?.ticket && selectedCase.sent"
+            class="btn"
+            :to="`/tickets/${selected.caseId}`"
+          >
+            Voir le ticket L2
+          </router-link>
         </div>
       </aside>
     </div>

@@ -30,7 +30,7 @@ const SCORE_BAND = {
 }
 
 const ASSETS = {
-  EC2: ['i-0paydemo', 'bastion-prod', 'i-07batch', 'i-0a12ec2pay', 'i-04devbox', 'i-09scanlab'],
+  EC2: ['i-0payfront', 'bastion-prod', 'i-07batch', 'i-0a12ec2pay', 'i-04devbox', 'i-09scanlab'],
   ELB: ['nlb-payments', 'alb-checkout'],
   Lambda: ['lambda-health', 'lambda-notify'],
   S3: ['s3://checkout-logs', 's3://checkout-receipts'],
@@ -182,12 +182,13 @@ function document() {
     meta: {
       product: 'Smart Agentic SOC',
       org: 'Checkout SAS',
-      environment: 'DEMO',
+      environment: 'prod',
+      region: 'eu-west-1',
+      llm: 'Amazon Bedrock',
       schemaVersion: SCHEMA.version,
       generatedAt: new Date().toISOString(),
       count,
       fields: [...SCHEMA.required, ...SCHEMA.optional],
-      note: 'Import depuis le pilotage — sévérité liée au type, HIGH/CRITICAL → ticket L2',
     },
     alerts,
   }

@@ -2,16 +2,9 @@
   "meta": {
     "product": "Smart Agentic SOC",
     "org": "Checkout SAS",
-    "environment": "DEMO",
-    "llm": "Bedrock EU (simulé)",
-    "dataNote": "14 alertes simulées GuardDuty · WAF · SIEM"
-  },
-  "kpis": {
-    "alerts24h": 51240,
-    "falsePositiveL1Pct": 87,
-    "mttdMinutes": 4.2,
-    "mttdBeforeMinutes": 47,
-    "escalationsL2": 12
+    "environment": "prod",
+    "region": "eu-west-1",
+    "llm": "Amazon Bedrock"
   },
   "alerts": [
     {
@@ -19,7 +12,7 @@
       "severity": "CRITICAL",
       "source": "GuardDuty",
       "type": "UnauthorizedAPICall",
-      "asset": "i-0paydemo",
+      "asset": "i-0payfront",
       "resourceType": "EC2",
       "region": "eu-west-1",
       "score": 91,

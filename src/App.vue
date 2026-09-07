@@ -62,11 +62,9 @@ onMounted(() => {
       </nav>
     </aside>
     <div class="main">
-      <header class="topbar">
-        <span class="pill mono">{{ soc.clock }}</span>
-      </header>
       <div class="agent-bar">
         <AgentPipeline compact />
+        <span class="pill mono agent-clock">{{ soc.clock }}</span>
       </div>
       <p v-if="soc.error" class="banner warn" style="margin: 16px 24px 0">{{ soc.error }}</p>
       <router-view />
