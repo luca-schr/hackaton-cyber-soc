@@ -4,10 +4,12 @@ import { useRouter } from 'vue-router'
 import { soc } from '../store/soc'
 
 const router = useRouter()
+const OPEN_STATUSES = ['new', 'ready', 'awaiting_l2', 'escalated']
+
 const severity = ref('ALL')
 const source = ref('ALL')
 const resource = ref('ALL')
-const status = ref('ALL')
+const status = ref('open')
 const selectedId = ref('GD-8841')
 
 const sources = computed(() => ['ALL', ...new Set(soc.alerts.map((a) => a.source))])
@@ -18,6 +20,7 @@ const filtered = computed(() =>
     if (severity.value !== 'ALL' && alert.severity !== severity.value) return false
     if (source.value !== 'ALL' && alert.source !== source.value) return false
     if (resource.value !== 'ALL' && alert.resourceType !== resource.value) return false
+    if (status.value === 'open') return OPEN_STATUSES.includes(alert.status)
     if (status.value !== 'ALL' && alert.status !== status.value) return false
     return true
   }),
@@ -71,7 +74,8 @@ function openCase() {
         <div class="field">
           <label>Statut</label>
           <select v-model="status">
-            <option>ALL</option>
+            <option value="open">file ouverte</option>
+            <option value="ALL">ALL</option>
             <option value="new">new</option>
             <option value="ready">ready</option>
             <option value="awaiting_l2">awaiting_l2</option>

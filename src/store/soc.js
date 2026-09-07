@@ -343,5 +343,8 @@ export function simulateSend(caseId) {
 }
 
 export const pendingCount = computed(
-  () => soc.alerts.filter((alert) => alert.status === 'new' || alert.status === 'ready').length,
+  () =>
+    soc.alerts.filter((alert) =>
+      ['new', 'ready', 'awaiting_l2', 'escalated'].includes(alert.status),
+    ).length,
 )

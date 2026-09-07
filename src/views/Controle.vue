@@ -1,6 +1,6 @@
 <script setup>
 import AgentLogs from '../components/AgentLogs.vue'
-import { resetDemo, soc, stopPipeline } from '../store/soc'
+import { soc, stopPipeline } from '../store/soc'
 </script>
 
 <template>
@@ -18,7 +18,6 @@ import { resetDemo, soc, stopPipeline } from '../store/soc'
       </div>
       <div class="actions">
         <button class="btn primary" :disabled="soc.stopped" @click="stopPipeline">Stop pipeline</button>
-        <button class="btn" :disabled="soc.running" @click="resetDemo">Reset démo</button>
       </div>
     </section>
 

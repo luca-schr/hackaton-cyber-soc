@@ -2,7 +2,7 @@
 import { computed } from 'vue'
 import { useRouter } from 'vue-router'
 import AgentLogs from '../components/AgentLogs.vue'
-import { launchWorkflow, queuedAlerts, resetDemo, soc } from '../store/soc'
+import { launchWorkflow, queuedAlerts, soc } from '../store/soc'
 
 const router = useRouter()
 const preview = computed(() => queuedAlerts.value.slice(0, 4))
@@ -86,7 +86,6 @@ async function launch() {
         <button class="btn primary" :disabled="soc.running || soc.stopped || soc.launched" @click="launch">
           {{ soc.running ? 'Exécution…' : soc.launched ? 'Déjà lancé' : 'Lancer le workflow' }}
         </button>
-        <button class="btn" :disabled="soc.running" @click="resetDemo">Reset démo</button>
       </div>
     </section>
 

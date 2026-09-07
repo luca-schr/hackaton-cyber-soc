@@ -233,6 +233,32 @@ input[type='text'] {
   color: white;
 }
 
+.fab-reset {
+  position: fixed;
+  right: 10px;
+  bottom: 10px;
+  z-index: 20;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  background: var(--panel);
+  color: var(--muted);
+  border: 1px solid var(--line);
+  cursor: pointer;
+}
+
+.fab-reset:hover:not(:disabled) {
+  color: var(--text);
+  border-color: var(--muted);
+}
+
+.fab-reset:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
 .check {
   display: flex;
   align-items: center;
