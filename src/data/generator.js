@@ -28,15 +28,13 @@ function rand(min, max) {
 function rollSeverity(criticalOk) {
   const n = Math.random()
   if (criticalOk && n < 0.02) return 'CRITICAL'
-  if (n < 0.12) return 'HIGH'
-  if (n < 0.55) return 'MEDIUM'
+  if (n < 0.22) return 'HIGH'
   return 'LOW'
 }
 
 function scoreFor(severity) {
   if (severity === 'CRITICAL') return rand(88, 97)
   if (severity === 'HIGH') return rand(62, 84)
-  if (severity === 'MEDIUM') return rand(30, 54)
   return rand(8, 24)
 }
 

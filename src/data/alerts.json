@@ -58,7 +58,7 @@
     },
     {
       "id": "GD-9004",
-      "severity": "MEDIUM",
+      "severity": "LOW",
       "source": "GuardDuty",
       "type": "PortProbe",
       "asset": "i-09scanlab",
@@ -106,7 +106,7 @@
     },
     {
       "id": "WAF-9008",
-      "severity": "MEDIUM",
+      "severity": "LOW",
       "source": "WAF",
       "type": "RateLimitBurst",
       "asset": "api-webhooks",
@@ -154,7 +154,7 @@
     },
     {
       "id": "SIEM-9012",
-      "severity": "MEDIUM",
+      "severity": "LOW",
       "source": "SIEM",
       "type": "FailedMfaBurst",
       "asset": "user/ops-oncall",

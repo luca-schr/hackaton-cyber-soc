@@ -1,7 +1,6 @@
 export const SEV_LABEL = {
   CRITICAL: 'Critique',
   HIGH: 'Haute',
-  MEDIUM: 'Moyenne',
   LOW: 'Basse',
 }
 

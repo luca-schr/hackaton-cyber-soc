@@ -79,7 +79,6 @@ function openCase() {
             <option value="ALL">Tous</option>
             <option value="CRITICAL">{{ SEV_LABEL.CRITICAL }}</option>
             <option value="HIGH">{{ SEV_LABEL.HIGH }}</option>
-            <option value="MEDIUM">{{ SEV_LABEL.MEDIUM }}</option>
             <option value="LOW">{{ SEV_LABEL.LOW }}</option>
           </select>
         </div>

@@ -2,30 +2,30 @@ export const ARCH_AGENTS = [
   {
     n: 'A4',
     ids: ['scheduler'],
-    label: 'Orchestrate',
+    label: 'Orchestrer',
     models: ['Nova 2 Lite', 'AgentCore'],
-    task: 'Opens the case and runs the flow.',
+    task: 'Ouvre le dossier et lance le flux.',
   },
   {
     n: 'A1',
     ids: ['extract'],
-    label: 'Extract',
+    label: 'Extraire',
     models: ['Nova Micro'],
-    task: 'Normalizes and masks the event.',
+    task: 'Normalise et masque l’événement.',
   },
   {
     n: 'A2',
     ids: ['intel', 'llm'],
-    label: 'Analyze',
+    label: 'Analyser',
     models: ['Claude Sonnet', 'XGBoost', 'Cohere RAG'],
-    task: 'Scores the case. No system action.',
+    task: 'Score le dossier. Aucune action système.',
   },
   {
     n: 'A3',
     ids: ['notify'],
-    label: 'Notify',
+    label: 'Notifier',
     models: ['Claude Haiku'],
-    task: 'Sends the L2 ticket. Never isolates.',
+    task: 'Envoie le ticket L2. N’isole jamais.',
   },
 ]
 

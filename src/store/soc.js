@@ -6,11 +6,11 @@ import { generateAlert, resetLiveSeq } from '../data/generator'
 import { SEV_LABEL } from '../labels'
 
 const AGENT_DEFS = [
-  { id: 'scheduler', n: 'A4', label: 'Orchestrate', task: 'Ingestion du flux' },
-  { id: 'extract', n: 'A1', label: 'Extract', task: 'IP · agent · ressource' },
-  { id: 'intel', n: 'A2', label: 'Analyze', task: 'type · gravité · ressource' },
-  { id: 'llm', n: 'A2b', label: 'Analyze LLM', task: 'Verdict masqué' },
-  { id: 'notify', n: 'A3', label: 'Notify', task: 'Ticket L2 · envoi' },
+  { id: 'scheduler', n: 'A4', label: 'Orchestrer', task: 'Ingestion du flux' },
+  { id: 'extract', n: 'A1', label: 'Extraire', task: 'IP · agent · ressource' },
+  { id: 'intel', n: 'A2', label: 'Analyser', task: 'type · gravité · ressource' },
+  { id: 'llm', n: 'A2b', label: 'Analyser LLM', task: 'Verdict masqué' },
+  { id: 'notify', n: 'A3', label: 'Notifier', task: 'Ticket L2 · envoi' },
 ]
 
 const SOURCE_MAP = {
@@ -259,9 +259,10 @@ function sourceWidget(alerts) {
 }
 
 function severityWidget(alerts) {
-  const sevs = { CRITICAL: 0, HIGH: 0, MEDIUM: 0, LOW: 0 }
+  const sevs = { CRITICAL: 0, HIGH: 0, LOW: 0 }
   alerts.forEach((alert) => {
-    sevs[alert.severity] = (sevs[alert.severity] || 0) + 1
+    const key = alert.severity === 'CRITICAL' || alert.severity === 'HIGH' ? alert.severity : 'LOW'
+    sevs[key] += 1
   })
   return {
     id: 'severity',
@@ -271,7 +272,6 @@ function severityWidget(alerts) {
     slices: [
       { key: 'CRITICAL', label: SEV_LABEL.CRITICAL, n: sevs.CRITICAL, color: '#ef4444' },
       { key: 'HIGH', label: SEV_LABEL.HIGH, n: sevs.HIGH, color: '#f97316' },
-      { key: 'MEDIUM', label: SEV_LABEL.MEDIUM, n: sevs.MEDIUM, color: '#eab308' },
       { key: 'LOW', label: SEV_LABEL.LOW, n: sevs.LOW, color: '#9ca3af' },
     ],
   }
@@ -448,7 +448,6 @@ const FINDING_READ = {
 const DIAG_HINT = {
   CRITICAL: 'Piste automatique : escalade L2. Isolation recommandée, non exécutée.',
   HIGH: 'Piste automatique : escalade L2. L1 confirme, traite ou recale.',
-  MEDIUM: 'Piste automatique : traitement L1 ou faux positif. Escalade seulement si le contexte l’exige.',
   LOW: 'Piste automatique : bruit probable. Traitement L1 ou faux positif.',
 }
 
@@ -458,7 +457,7 @@ function buildDiagnostic(alert) {
     reading:
       FINDING_READ[alert.type] ||
       `Finding ${alert.type} sur ${alert.asset} (${alert.source}).`,
-    hint: DIAG_HINT[alert.severity] || DIAG_HINT.MEDIUM,
+    hint: DIAG_HINT[alert.severity] || DIAG_HINT.LOW,
     suggested: high ? 'escalade' : alert.severity === 'LOW' ? 'fp' : 'l1',
   }
 }
@@ -508,7 +507,7 @@ function normalizeAlert(raw, index) {
     id,
     caseId: raw.caseId || `INC-${id}`,
     ticketId: raw.ticketId ?? null,
-    severity: raw.severity || 'MEDIUM',
+    severity: raw.severity === 'CRITICAL' || raw.severity === 'HIGH' ? raw.severity : 'LOW',
     source: raw.source || 'GuardDuty',
     type: raw.type || raw.findingType || 'Inconnu',
     asset: raw.asset || raw.resource || 'inconnu',
