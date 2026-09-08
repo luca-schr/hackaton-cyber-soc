@@ -205,12 +205,6 @@ a {
   overflow-x: auto;
 }
 
-.pipeline-now {
-  margin: 8px 0 0;
-  color: var(--warn);
-  font-size: 12px;
-}
-
 .topbar .meta,
 .page .meta {
   color: var(--muted);
@@ -812,6 +806,49 @@ tr.fresh {
 .alerts-wide .kv {
   width: 100%;
   grid-template-columns: 92px minmax(0, 1fr);
+}
+
+.file-scroll {
+  max-height: min(56vh, 520px);
+  overflow: auto;
+}
+
+.file-scroll thead th {
+  position: sticky;
+  top: 0;
+  background: var(--panel);
+  box-shadow: 0 1px 0 var(--line);
+  z-index: 1;
+}
+
+.treated-drop > summary {
+  cursor: pointer;
+  font-size: 15px;
+  font-weight: 500;
+  list-style: none;
+}
+
+.treated-drop > summary::marker {
+  content: '';
+}
+
+.treated-drop > summary::-webkit-details-marker {
+  display: none;
+}
+
+.treated-drop > summary::before {
+  content: '▸';
+  display: inline-block;
+  width: 1em;
+  color: var(--muted);
+}
+
+.treated-drop[open] > summary::before {
+  content: '▾';
+}
+
+.treated-drop > summary + .meta {
+  margin-top: 10px;
 }
 
 .timeline {

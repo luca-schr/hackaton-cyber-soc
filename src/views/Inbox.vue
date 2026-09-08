@@ -2,7 +2,7 @@
 import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ALERT_STATUS, CRIT_LABEL, SEV_LABEL } from '../labels'
-import { LIST_LIMIT, soc } from '../store/soc'
+import { soc } from '../store/soc'
 
 const router = useRouter()
 
@@ -38,9 +38,6 @@ const treatedAlerts = computed(() =>
     .sort((a, b) => (b.treatedAtMs || b.receivedAtMs || 0) - (a.treatedAtMs || a.receivedAtMs || 0)),
 )
 
-const visibleOpen = computed(() => openAlerts.value.slice(0, LIST_LIMIT))
-const visibleTreated = computed(() => treatedAlerts.value.slice(0, LIST_LIMIT))
-
 const selected = computed(
   () =>
     soc.alerts.find((alert) => alert.id === selectedId.value) ||
@@ -60,7 +57,7 @@ function openCase() {
 
 <template>
   <div class="page">
-    <h1>Alerts · {{ openAlerts.length }} en file</h1>
+    <h1>Alerts</h1>
     <div v-if="!soc.launched" class="banner">
       Vous pouvez diagnostiquer une alerte et décider en L1. Le flux arrive en arrière-plan.
     </div>
@@ -105,7 +102,8 @@ function openCase() {
 
     <div class="alerts-wide">
       <section class="panel">
-        <h2>File ouverte · aperçu {{ visibleOpen.length }} sur {{ openAlerts.length }}</h2>
+        <h2>File ouverte</h2>
+        <div class="file-scroll">
         <table>
           <thead>
             <tr>
@@ -120,7 +118,7 @@ function openCase() {
           </thead>
           <tbody>
             <tr
-              v-for="alert in visibleOpen"
+              v-for="alert in openAlerts"
               :key="alert.id"
               class="clickable"
               :class="{ selected: selected?.id === alert.id, fresh: alert.fresh }"
@@ -140,6 +138,7 @@ function openCase() {
           </tbody>
         </table>
         <p v-if="!openAlerts.length" class="empty">Aucune alerte en file.</p>
+        </div>
       </section>
 
       <aside class="panel sev-card" :class="selected.severity" v-if="selected">
@@ -185,11 +184,12 @@ function openCase() {
       </aside>
     </div>
 
-    <section class="panel">
-      <h2>Alertes traitées · aperçu {{ visibleTreated.length }} sur {{ treatedAlerts.length }}</h2>
-      <p class="meta" style="margin: 0 0 8px">
+    <details class="panel treated-drop">
+      <summary>Alertes traitées</summary>
+      <p class="meta">
         Classées L1 (bruit, FP, traité) ou ticket L2 envoyé. Isolation jamais exécutée.
       </p>
+      <div class="file-scroll">
       <table>
         <thead>
           <tr>
@@ -204,7 +204,7 @@ function openCase() {
         </thead>
         <tbody>
           <tr
-            v-for="alert in visibleTreated"
+            v-for="alert in treatedAlerts"
             :key="alert.id"
             class="clickable"
             :class="{ selected: selected?.id === alert.id }"
@@ -221,6 +221,7 @@ function openCase() {
         </tbody>
       </table>
       <p v-if="!treatedAlerts.length" class="empty">Aucune alerte traitée pour ces filtres.</p>
-    </section>
+      </div>
+    </details>
   </div>
 </template>
