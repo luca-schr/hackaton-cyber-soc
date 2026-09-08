@@ -776,10 +776,9 @@ tr.fresh {
   font-weight: 600;
 }
 
-.crit.vital { color: var(--sev-crit); }
-.crit.sensible { color: var(--sev-high); }
-.crit.standard { color: var(--text); }
-.crit.secondaire { color: var(--sev-low); }
+.crit.critique { color: var(--sev-crit); }
+.crit.elevee { color: var(--sev-high); }
+.crit.faible { color: var(--sev-low); }
 
 .split {
   display: grid;

@@ -1,14 +1,13 @@
 export const SEV_LABEL = {
   CRITICAL: 'Critique',
-  HIGH: 'Haute',
-  LOW: 'Basse',
+  HIGH: 'Élevée',
+  LOW: 'Faible',
 }
 
 export const CRIT_LABEL = {
-  vital: 'C1 vital',
-  sensible: 'C2 sensible',
-  standard: 'C3 standard',
-  secondaire: 'C4 secondaire',
+  critique: 'Critique',
+  elevee: 'Élevée',
+  faible: 'Faible',
 }
 
 export const ALERT_STATUS = {
