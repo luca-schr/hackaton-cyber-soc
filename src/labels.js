@@ -1,8 +1,15 @@
 export const SEV_LABEL = {
   CRITICAL: 'Critique',
-  HIGH: 'Élevée',
+  HIGH: 'Haute',
   MEDIUM: 'Moyenne',
-  LOW: 'Faible',
+  LOW: 'Basse',
+}
+
+export const CRIT_LABEL = {
+  vital: 'C1 vital',
+  sensible: 'C2 sensible',
+  standard: 'C3 standard',
+  secondaire: 'C4 secondaire',
 }
 
 export const ALERT_STATUS = {
@@ -12,7 +19,7 @@ export const ALERT_STATUS = {
   escalated: 'Escaladé',
   false_positive: 'Faux positif',
   ignored: 'Ignorée',
-  closed: 'Clos',
+  closed: 'Traité L1',
 }
 
 export const AGENT_STATUS = {
@@ -35,4 +42,5 @@ export const LOG_AGENT = {
   intel: 'analyse',
   llm: 'LLM',
   notify: 'notif.',
+  l1: 'L1',
 }

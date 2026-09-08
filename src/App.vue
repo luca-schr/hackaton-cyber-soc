@@ -1,16 +1,21 @@
 <script setup>
 import { onMounted } from 'vue'
-import { loadData, loginDemo, pendingCount, resetDemo, soc, startClock } from './store/soc'
+import { launchWorkflow, loadData, loginDemo, pendingCount, resetDemo, soc, startClock } from './store/soc'
+import AgentClock from './components/AgentClock.vue'
 import AgentPipeline from './components/AgentPipeline.vue'
 
 onMounted(() => {
   startClock()
   loadData()
 })
+
+function launchAgents() {
+  launchWorkflow()
+}
 </script>
 
 <template>
-  <div v-if="soc.bootstrapping" class="boot-screen">
+  <div v-if="soc.bootstrapping" key="boot" class="boot-screen">
     <div class="boot-inner">
       <div class="brand">
         <small>Checkout SAS</small>
@@ -23,7 +28,7 @@ onMounted(() => {
     </div>
   </div>
 
-  <div v-else-if="!soc.loggedIn" class="login-screen">
+  <div v-else-if="!soc.loggedIn" key="login" class="login-screen">
     <form class="login-card" @submit.prevent="loginDemo">
       <div class="brand">
         <small>Checkout SAS</small>
@@ -45,7 +50,7 @@ onMounted(() => {
     </form>
   </div>
 
-  <div v-else class="shell">
+  <div v-else key="shell" class="shell">
     <aside class="nav-side">
       <div class="brand">
         <small>Checkout SAS</small>
@@ -62,11 +67,22 @@ onMounted(() => {
       </nav>
     </aside>
     <div class="main">
-      <div class="agent-bar">
+      <div class="agent-bar" :class="{ 'is-run': soc.running, 'is-ok': soc.launched && !soc.running && !soc.stopped }">
         <AgentPipeline compact />
-        <span class="pill mono agent-clock">{{ soc.clock }}</span>
+        <button
+          class="btn primary agent-launch"
+          type="button"
+          :disabled="soc.running || soc.stopped || soc.launched || !soc.alerts.length"
+          @click="launchAgents"
+        >
+          <svg viewBox="0 0 16 16" width="11" height="11" aria-hidden="true">
+            <path fill="currentColor" d="M4.2 2.4v11.2L13.4 8 4.2 2.4z" />
+          </svg>
+          AI Workflow
+        </button>
+        <AgentClock />
       </div>
-      <p v-if="soc.error" class="banner warn" style="margin: 16px 24px 0">{{ soc.error }}</p>
+      <p v-if="soc.error" class="banner warn" style="margin: 10px 18px 0">{{ soc.error }}</p>
       <router-view />
     </div>
     <button

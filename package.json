@@ -5,8 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
-    "generate:alerts": "node scripts/generate-alerts.mjs"
+    "build": "vite build"
   },
   "dependencies": {
     "vue": "^3.5.41",

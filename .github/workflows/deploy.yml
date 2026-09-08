@@ -2,7 +2,7 @@ name: Hackaton SOC
 
 on:
   push:
-    branches: ["main"] # Remplace par "master" si besoin
+    branches: ["main"]
 
 permissions:
   contents: read

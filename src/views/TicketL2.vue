@@ -1,20 +1,19 @@
 <script setup>
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
-import { confirmL2Send, inspectTicket, playCase, soc } from '../store/soc'
+import { confirmL2Send, inspectTicket, soc } from '../store/soc'
 
 const route = useRoute()
 const copied = ref(false)
 const item = computed(() => soc.cases[route.params.id])
 const ticket = computed(() => item.value?.ticket)
 
-async function syncTicket() {
-  await playCase(route.params.id)
+function syncTicket() {
   inspectTicket(route.params.id)
 }
 
 function confirmSend() {
-  if (!item.value?.played || item.value?.playing) return
+  if (!item.value?.ticket || item.value.sent) return
   if (!confirmL2Send(route.params.id)) return
 }
 
@@ -49,14 +48,13 @@ async function copyTicket() {
 <template>
   <div class="page" v-if="ticket">
     <section class="panel ticket">
-      <div class="pills" style="margin-bottom: 12px">
+      <div class="pills" style="margin-bottom: 8px">
         <span class="pill" :style="{ color: 'var(--sev-crit)', borderColor: 'var(--sev-crit)' }">
           {{ ticket.priority }}
         </span>
         <span class="pill">{{ ticket.id }}</span>
         <span class="pill live" v-if="item.sent">E-mail L2 transmis</span>
-        <span class="pill attention" v-else-if="item.playing">Analyse…</span>
-        <span class="pill attention" v-else-if="item.played">Brouillon · non transmis</span>
+        <span class="pill attention" v-else>Brouillon · en attente de décision L1</span>
       </div>
       <h1>{{ ticket.subject }}</h1>
       <p class="meta">À : {{ ticket.to }}</p>
@@ -82,10 +80,9 @@ async function copyTicket() {
         <button
           v-if="!item.sent"
           class="btn ok"
-          :disabled="!item.played || item.playing"
           @click="confirmSend"
         >
-          {{ item.playing ? 'Analyse…' : 'Confirmer l’envoi L2' }}
+          Confirmer l’envoi L2
         </button>
         <button class="btn" @click="copyTicket">
           {{ copied ? 'Ticket copié' : 'Copier le ticket' }}
@@ -95,7 +92,7 @@ async function copyTicket() {
     </section>
   </div>
   <div class="page" v-else>
-    <p class="empty">Pas de ticket L2 pour ce dossier (faux positif ou dossier incomplet).</p>
+    <p class="empty">Pas de ticket L2 pour ce dossier (traité L1, faux positif ou dossier incomplet).</p>
     <router-link class="btn" to="/alerts">Alerts</router-link>
   </div>
 </template>

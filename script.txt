@@ -1,21 +1,13 @@
-Parcours démo (jury) — un seul fil, ~3 min
+Parcours demo 2 min (jury)
 
-1. Login → loader console → Dashboard
-   File réelle, haute priorité. Pas de chiffres brochure.
-   À traiter en priorité (HIGH/CRITICAL, cliquable).
-   Clic dossier sans lot : analyse factice → Escalade L2 / faux positif.
+0:00 Login L1
+0:20 Dashboard: Alerts + haute priorite. Clic GD-9000 (score 91, asset paiement).
+     User story L1: diagnostic auto, CMDB, SOP. Pas d agents.
+     Dire: Escalade L2 / traitement L1 / faux positif. Ne pas envoyer encore.
+0:50 Retour Dashboard. AI Workflow (barre). Regarder A4 A1 A2 A3.
+     Dire: masquage A1, score A2, ticket A3, isolation jamais executee.
+1:20 Control: badges modeles, seuils 0-49 / 50-79 / 80-100, stop pipeline.
+1:40 Alerts: ouvrir GD-9000, confirmer envoi L2 (user story N2). Ticket P1.
+1:55 Stoppe: L2 decide, l IA propose.
 
-2. Lancer le workflow (lot)
-   Barre agents A4→A1→A2→A2b LLM→A3.
-   LLM : masquage, verdict, ticket rédigé pour HIGH/CRITICAL.
-   LOW ignorées L1, MEDIUM classées FP. Isolation jamais exécutée.
-
-3. Après le lot, ouvrir GD-9000
-   Preuves déjà là (pas de re-scan).
-   Escalade L2 = relire le ticket → Confirmer l’envoi.
-
-Contrast 30 s : Alerts, bas de liste (faibles ignorées).
-
-Sécu 20 s (Q/R) : masquage avant/après ; Control → arrêter le pipeline.
-
-Ne pas faire : analyser une alerte avant le lot, rejouer le LLM, import JSON.
+Ne pas faire: rejouer le LLM, importer du JSON, isoler une instance.

@@ -1,7 +1,7 @@
 <script setup>
 import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { ALERT_STATUS, SEV_LABEL } from '../labels'
+import { ALERT_STATUS, CRIT_LABEL, SEV_LABEL } from '../labels'
 import { soc } from '../store/soc'
 
 const router = useRouter()
@@ -52,19 +52,25 @@ function openCase() {
   <div class="page">
     <h1>Alerts · {{ openAlerts.length }} en file</h1>
     <div v-if="!soc.launched" class="banner">
-      Lancez le workflow depuis le Dashboard pour ingérer la file.
+      Vous pouvez diagnostiquer une alerte et décider en L1. Le workflow agentique n’a pas encore tourné.
+    </div>
+    <div v-else-if="soc.running" class="banner warn">
+      Agents en cours. Classement L1 et envoi des tickets L2.
+    </div>
+    <div v-else class="banner">
+      File classée. Tickets L2 envoyés. Isolation non exécutée.
     </div>
 
     <section class="panel filters">
       <div class="row">
         <div class="field">
-          <label>Sévérité</label>
+          <label>Gravité</label>
           <select v-model="severity">
             <option value="ALL">Tous</option>
-            <option value="CRITICAL">Critique</option>
-            <option value="HIGH">Élevée</option>
-            <option value="MEDIUM">Moyenne</option>
-            <option value="LOW">Faible</option>
+            <option value="CRITICAL">{{ SEV_LABEL.CRITICAL }}</option>
+            <option value="HIGH">{{ SEV_LABEL.HIGH }}</option>
+            <option value="MEDIUM">{{ SEV_LABEL.MEDIUM }}</option>
+            <option value="LOW">{{ SEV_LABEL.LOW }}</option>
           </select>
         </div>
         <div class="field">
@@ -96,7 +102,7 @@ function openCase() {
               <th>Score</th>
               <th>Reçu</th>
               <th>Statut</th>
-              <th>Agent</th>
+              <th>Motif</th>
             </tr>
           </thead>
           <tbody>
@@ -129,6 +135,12 @@ function openCase() {
           <span class="sev" :class="selected.severity">{{ SEV_LABEL[selected.severity] || selected.severity }}</span>
         </h2>
         <div class="kv" v-if="selectedCase">
+          <span>Criticité actif</span>
+          <code class="crit" :class="selected.cmdb?.criticality">{{ CRIT_LABEL[selected.cmdb?.criticality] || '—' }}</code>
+          <span>Procédure</span>
+          <code>{{ selected.cmdb?.sop || '—' }}</code>
+          <span>CMDB</span>
+          <code>{{ selected.cmdb?.desc || selected.asset }} · {{ selected.cmdb?.env }} · {{ selected.cmdb?.owner }}</code>
           <span>IP source</span>
           <code>{{ selectedCase.masked.ip }} · déjà masquée</code>
           <span>Navigateur</span>
@@ -147,10 +159,10 @@ function openCase() {
         <p v-else class="empty">Pas de dossier détaillé.</p>
         <div class="actions">
           <button class="btn primary" :disabled="!selectedCase" @click="openCase">
-            {{ soc.launched ? 'Voir le dossier' : 'Ouvrir le dossier' }}
+            Diagnostic L1
           </button>
           <router-link
-            v-if="soc.launched && selectedCase?.ticket && selectedCase.sent"
+            v-if="selectedCase?.ticket && selectedCase.sent"
             class="btn"
             :to="`/tickets/${selected.caseId}`"
           >
@@ -162,14 +174,14 @@ function openCase() {
 
     <section class="panel">
       <h2>Alertes traitées · {{ treatedAlerts.length }}</h2>
-      <p class="meta" style="margin: -4px 0 12px">
-        Faible → ignorée L1 · moyenne → faux positif · L2 validé → escaladé
+      <p class="meta" style="margin: 0 0 8px">
+        Classées L1 (bruit, FP, traité) ou ticket L2 envoyé. Isolation jamais exécutée.
       </p>
       <table>
         <thead>
           <tr>
             <th>ID</th>
-            <th>Sévérité</th>
+            <th>Gravité</th>
             <th>Type</th>
             <th>Ressource</th>
             <th>Reçu</th>
@@ -195,8 +207,7 @@ function openCase() {
           </tr>
         </tbody>
       </table>
-      <p v-if="soc.launched && !treatedAlerts.length" class="empty">Aucune alerte traitée pour ces filtres.</p>
-      <p v-else-if="!soc.launched" class="empty">Le triage n’a pas encore tourné.</p>
+      <p v-if="!treatedAlerts.length" class="empty">Aucune alerte traitée pour ces filtres.</p>
     </section>
   </div>
 </template>

@@ -1,11 +1,15 @@
 import { computed, reactive } from 'vue'
+import alertsDoc from '../data/alerts.json'
+import { lookupCmdb } from '../data/cmdb'
+import { bandFromScore } from '../data/architecture'
+import { SEV_LABEL } from '../labels'
 
 const AGENT_DEFS = [
   { id: 'scheduler', n: 'A4', label: 'Planificateur', task: 'Ingestion du flux' },
   { id: 'extract', n: 'A1', label: 'Extraction', task: 'IP · agent · ressource' },
   { id: 'intel', n: 'A2', label: 'Analyse', task: 'type · sévérité · ressource' },
   { id: 'llm', n: 'A2b', label: 'Analyse LLM', task: 'Verdict masqué' },
-  { id: 'notify', n: 'A3', label: 'Notification', task: 'Ticket L2 · validation' },
+  { id: 'notify', n: 'A3', label: 'Notification', task: 'Ticket L2 · envoi' },
 ]
 
 const SOURCE_MAP = {
@@ -16,7 +20,6 @@ const SOURCE_MAP = {
 }
 
 let snapshot = null
-let bundledSnapshot = null
 let logSeq = 0
 let clockTimer = null
 
@@ -38,6 +41,7 @@ export const soc = reactive({
     maskPii: true,
     autoRemediate: false,
   },
+  dashSlice: null,
   sentTickets: [],
   logs: [],
   loggedIn: false,
@@ -67,11 +71,6 @@ function formatClock(date = new Date()) {
   return date.toLocaleTimeString('fr-FR', { hour12: false })
 }
 
-function dataUrl(file) {
-  const base = import.meta.env.BASE_URL || '/'
-  return `${base}data/${file}`
-}
-
 export function pushLog(agent, message, level = 'info') {
   soc.logs.unshift({
     id: ++logSeq,
@@ -92,29 +91,19 @@ export function startClock() {
   clockTimer = setInterval(tick, 1000)
 }
 
-export async function loadData() {
+export function loadData() {
   if (soc.loaded) return
-  try {
-    const alertsRes = await fetch(dataUrl('alerts.json'))
-    if (!alertsRes.ok) {
-      throw new Error('Impossible de lire alerts.json')
-    }
-    const alertsDoc = await alertsRes.json()
-    const alerts = (alertsDoc.alerts || []).map(normalizeAlert)
-    stampArrivals(alerts)
-    snapshot = {
-      meta: clone(alertsDoc.meta || {}),
-      kpis: clone(alertsDoc.kpis || {}),
-      alerts,
-      cases: casesFromAlerts(alerts),
-    }
-    bundledSnapshot = clone(snapshot)
-    applySnapshot()
-    soc.loaded = true
-    pushLog('scheduler', `Démarrage · ${alerts.length} alertes en file`, 'ok')
-  } catch (err) {
-    soc.error = err.message || 'Chargement JSON échoué'
+  const alerts = (alertsDoc.alerts || []).map(normalizeAlert)
+  stampArrivals(alerts)
+  snapshot = {
+    meta: clone(alertsDoc.meta || {}),
+    kpis: clone(alertsDoc.kpis || {}),
+    alerts,
+    cases: casesFromAlerts(alerts),
   }
+  applySnapshot()
+  soc.loaded = true
+  pushLog('scheduler', `Démarrage · ${alerts.length} alertes en file`, 'ok')
 }
 
 function applySnapshot() {
@@ -158,23 +147,157 @@ export const queuedAlerts = computed(() => {
 })
 
 const SEV_RANK = { CRITICAL: 0, HIGH: 1, MEDIUM: 2, LOW: 3 }
+const L1_DONE = ['ignored', 'false_positive', 'closed']
+const L2_STATUSES = ['ready', 'awaiting_l2', 'escalated']
+const DONE_STATUSES = ['ignored', 'false_positive', 'closed', 'escalated']
 
-export const attentionAlerts = computed(() => {
-  const done = ['ignored', 'false_positive', 'closed', 'escalated']
-  return queuedAlerts.value
-    .filter(
-      (alert) =>
-        (alert.severity === 'CRITICAL' || alert.severity === 'HIGH') &&
-        !done.includes(alert.status),
-    )
-    .sort((a, b) => {
-      if (a.star !== b.star) return a.star ? -1 : 1
-      const gap = (SEV_RANK[a.severity] ?? 9) - (SEV_RANK[b.severity] ?? 9)
-      return gap !== 0 ? gap : b.score - a.score
-    })
+export function clearDashSlice() {
+  soc.dashSlice = null
+}
+
+export function toggleDashSlice(widgetId, key) {
+  if (!widgetId || !key) return
+  if (soc.dashSlice?.widgetId === widgetId && soc.dashSlice?.key === key) {
+    soc.dashSlice = null
+    return
+  }
+  soc.dashSlice = { widgetId, key }
+}
+
+function sortQueue(alerts) {
+  return [...alerts].sort((a, b) => {
+    if (a.star !== b.star) return a.star ? -1 : 1
+    const gap = (SEV_RANK[a.severity] ?? 9) - (SEV_RANK[b.severity] ?? 9)
+    if (gap !== 0) return gap
+    return b.score - a.score
+  })
+}
+
+function pathBucket(alert) {
+  if (L1_DONE.includes(alert.status)) return 'l1'
+  if (L2_STATUSES.includes(alert.status)) return 'l2'
+  return 'file'
+}
+
+function sourceWidget(alerts) {
+  const sources = {}
+  alerts.forEach((alert) => {
+    sources[alert.source] = (sources[alert.source] || 0) + 1
+  })
+  return {
+    id: 'source',
+    type: 'pie',
+    label: 'File',
+    value: String(alerts.length),
+    slices: [
+      { key: 'GuardDuty', label: 'GuardDuty', n: sources.GuardDuty || 0, color: '#00dfff' },
+      { key: 'WAF', label: 'WAF', n: sources.WAF || 0, color: '#3a00f9' },
+      { key: 'SIEM', label: 'SIEM', n: sources.SIEM || 0, color: '#15fd00' },
+    ],
+  }
+}
+
+function severityWidget(alerts) {
+  const sevs = { CRITICAL: 0, HIGH: 0, MEDIUM: 0, LOW: 0 }
+  alerts.forEach((alert) => {
+    sevs[alert.severity] = (sevs[alert.severity] || 0) + 1
+  })
+  return {
+    id: 'severity',
+    type: 'pie',
+    label: 'Gravité',
+    value: String(sevs.CRITICAL + sevs.HIGH),
+    slices: [
+      { key: 'CRITICAL', label: SEV_LABEL.CRITICAL, n: sevs.CRITICAL, color: '#ef4444' },
+      { key: 'HIGH', label: SEV_LABEL.HIGH, n: sevs.HIGH, color: '#f97316' },
+      { key: 'other', label: 'Autres', n: sevs.MEDIUM + sevs.LOW, color: '#9ca3af' },
+    ],
+  }
+}
+
+function scoreWidget(alerts) {
+  const bands = { watch: 0, p2: 0, p1: 0 }
+  alerts.forEach((alert) => {
+    bands[bandFromScore(alert.score).id] += 1
+  })
+  return {
+    id: 'score',
+    type: 'pie',
+    label: 'Score A2',
+    value: String(bands.p1 + bands.p2),
+    defaultKey: 'p1',
+    slices: [
+      { key: 'p1', label: 'P1', n: bands.p1, color: '#ef4444' },
+      { key: 'p2', label: 'P2', n: bands.p2, color: '#f97316' },
+      { key: 'watch', label: 'Surveillance', n: bands.watch, color: '#9ca3af' },
+    ],
+  }
+}
+
+function pathWidget(alerts) {
+  const buckets = { l1: 0, l2: 0, file: 0 }
+  alerts.forEach((alert) => {
+    buckets[pathBucket(alert)] += 1
+  })
+  return {
+    id: 'path',
+    type: 'pie',
+    label: 'Parcours',
+    value: String(buckets.l1 + buckets.l2),
+    defaultKey: soc.launched ? 'l2' : 'file',
+    slices: [
+      { key: 'l1', label: 'L1', n: buckets.l1, color: '#15fd00' },
+      { key: 'l2', label: 'L2', n: buckets.l2, color: '#ef4444' },
+      { key: 'file', label: 'File', n: buckets.file, color: '#00dfff' },
+    ],
+  }
+}
+
+function matchesDashSlice(alert, slice) {
+  if (!slice) return true
+  const { widgetId, key } = slice
+  if (widgetId === 'source') return alert.source === key
+  if (widgetId === 'severity') {
+    if (key === 'other') return alert.severity === 'MEDIUM' || alert.severity === 'LOW'
+    return alert.severity === key
+  }
+  if (widgetId === 'score') return bandFromScore(alert.score).id === key
+  if (widgetId === 'path') return pathBucket(alert) === key
+  return true
+}
+
+export const dashboardWidgets = computed(() => {
+  const alerts = queuedAlerts.value
+  return [sourceWidget(alerts), severityWidget(alerts), scoreWidget(alerts), pathWidget(alerts)]
+})
+
+export const drillAlerts = computed(() =>
+  sortQueue(queuedAlerts.value.filter((alert) => matchesDashSlice(alert, soc.dashSlice))),
+)
+
+export const dashTableMeta = computed(() => {
+  const n = drillAlerts.value.length
+  const slice = soc.dashSlice
+  if (slice) {
+    const widget = dashboardWidgets.value.find((item) => item.id === slice.widgetId)
+    const part =
+      widget?.slices?.find((item) => item.key === slice.key)
+    const name = part?.label || slice.key
+    return {
+      title: `${widget?.label || 'Filtre'} · ${name}`,
+      hint: 'Cas derrière le chiffre. Clic pour ouvrir le dossier.',
+      count: n,
+    }
+  }
+  return {
+    title: 'File',
+    hint: 'Clic widget pour filtrer, clic ligne pour ouvrir le dossier.',
+    count: n,
+  }
 })
 
 function classifyAlert(alert) {
+  if (DONE_STATUSES.includes(alert.status)) return alert.status
   const item = soc.cases[alert.caseId]
   if (!item) {
     alert.status = 'ignored'
@@ -192,7 +315,7 @@ function classifyAlert(alert) {
     return 'false_positive'
   }
   alert.status = 'ready'
-    alert.agentLabel = 'Dossier prêt'
+  alert.agentLabel = 'Dossier prêt'
   return 'ready'
 }
 
@@ -210,6 +333,66 @@ function scanFromAlert(alert) {
     hits: escalate ? [`${alert.severity} · ${alert.asset}`] : [],
     keywords: [alert.type, alert.source].filter(Boolean),
   }
+}
+
+const FINDING_READ = {
+  UnauthorizedAPICall: 'Appel API non autorisé sur une ressource sensible. Compromission de rôle ou de clé possible.',
+  SSHBruteForce: 'Rafale d’authentifications SSH. Accès forcé vers un bastion, ou scan opportuniste.',
+  CryptoCurrencyMining: 'Charge CPU / processus de minage. Instance potentiellement détournée.',
+  ExfiltrationS3: 'Lecture anormale d’un bucket. Fuite de données possible.',
+  PortProbe: 'Balayage de ports. Reconnaissance, souvent sans exploitation.',
+  HealthCheckProbe: 'Sondes répétées vers un équilibreur. Trafic de santé ou scanner.',
+  CredentialStuffing: 'Tentatives de login en masse. Compromission de comptes applicatifs possible.',
+  SqlInjectionAttempt: 'Payloads d’injection SQL sur une API. Tentative d’accès aux données.',
+  RateLimitBurst: 'Pic de requêtes au-delà du quota. Bot, test de charge ou déni de service léger.',
+  ScannerUserAgent: 'User-agent de scanner sur le CDN. Reconnaissance Internet, souvent sans impact.',
+  PrivilegeEscalation: 'Élévation de privilèges IAM. Compte interne potentiellement abusé.',
+  ImpossibleTravel: 'Connexions incompatibles géographiquement. Compte volé ou VPN légitime.',
+  FailedMfaBurst: 'Échecs MFA répétés. Stuffing ou utilisateur bloqué.',
+  OffHoursLogin: 'Connexion hors horaires. Astreinte légitime ou compte détourné.',
+}
+
+const DIAG_HINT = {
+  CRITICAL: 'Piste automatique : escalade L2. Isolation recommandée, non exécutée.',
+  HIGH: 'Piste automatique : escalade L2. L1 confirme, traite ou recale.',
+  MEDIUM: 'Piste automatique : traitement L1 ou faux positif. Escalade seulement si le contexte l’exige.',
+  LOW: 'Piste automatique : bruit probable. Traitement L1 ou faux positif.',
+}
+
+function buildDiagnostic(alert) {
+  const high = alert.severity === 'CRITICAL' || alert.severity === 'HIGH'
+  return {
+    reading:
+      FINDING_READ[alert.type] ||
+      `Finding ${alert.type} sur ${alert.asset} (${alert.source}).`,
+    hint: DIAG_HINT[alert.severity] || DIAG_HINT.MEDIUM,
+    suggested: high ? 'escalade' : alert.severity === 'LOW' ? 'fp' : 'l1',
+  }
+}
+
+function makeTicket(alert) {
+  const ticketId = alert.ticketId || `SOC-L2-${alert.id}`
+  alert.ticketId = ticketId
+  const band = bandFromScore(alert.score)
+  return {
+    id: ticketId,
+    priority: band.ticket || 'P3',
+    to: 'analystes.l2@checkout.internal',
+    subject: `[${band.label}] ${alert.type} ${alert.asset}`,
+    summary: `Alerte ${alert.id} (${alert.source}). Score ${alert.score} (${band.range}). Isolation recommandee, non executee.`,
+    actions: [
+      'Isoler le groupe de sécurité (validation L2)',
+      'Instantané disque si instance',
+      'Vérifier CloudTrail sur 24 h',
+    ],
+  }
+}
+
+export function isL1Locked(caseId) {
+  const item = soc.cases[caseId]
+  if (!item || item.sent) return true
+  const alert = soc.alerts.find((row) => row.caseId === caseId)
+  return Boolean(alert && DONE_STATUSES.includes(alert.status))
 }
 
 function maskIp(ip) {
@@ -244,6 +427,7 @@ function normalizeAlert(raw, index) {
     receivedAt: formatClock(),
     star: Boolean(raw.star),
     ip: raw.ip || raw.sourceIp || null,
+    cmdb: lookupCmdb(raw.asset || raw.resource || 'inconnu'),
   }
 }
 
@@ -257,15 +441,16 @@ function stubCase(alert) {
   const ip = alert.ip || '0.0.0.0'
   const ua = userAgentFor(alert)
   const escalate = alert.severity === 'CRITICAL' || alert.severity === 'HIGH'
-  const ticketId = escalate ? alert.ticketId || `SOC-L2-${alert.id}` : null
-  if (ticketId) alert.ticketId = ticketId
+  const ticket = escalate ? makeTicket(alert) : null
   return {
     alertId: alert.id,
-    ticketId,
+    ticketId: ticket?.id ?? null,
     title: `${alert.type} sur ${alert.asset}`,
     severity: alert.severity,
     confidence: alert.score,
     intel: scanFromAlert(alert),
+    diagnostic: buildDiagnostic(alert),
+    cmdb: alert.cmdb,
     raw: {
       ip,
       instanceId: alert.asset,
@@ -285,7 +470,7 @@ function stubCase(alert) {
       vpc: 'n/a',
     },
     verdict: escalate
-      ? `Alerte ${alert.severity} (${alert.type}). Escalade L2 proposée, isolation non exécutée.`
+      ? `Alerte ${alert.severity} (${alert.type}). Escalade L2 envoyée, isolation non exécutée.`
       : `Alerte ${alert.severity} — bruit L1 probable, pas d’escalade.`,
     steps: [
       { id: 'scheduler', agent: 'Agent 4 · Planificateur', time: alert.receivedAt, summary: `Ingestion — ${alert.id}`, delayMs: 700 },
@@ -293,22 +478,9 @@ function stubCase(alert) {
       { id: 'mask', agent: 'Masquage · sécurité dès la conception', time: alert.receivedAt, summary: `${ip} → ${maskIp(ip)}`, highlight: true, delayMs: 800 },
       { id: 'intel', agent: 'Agent 2 · Analyse', time: alert.receivedAt, summary: escalate ? `Priorité ${alert.severity} · ${alert.type}` : `Bruit probable · ${alert.type}`, delayMs: 800 },
       { id: 'llm', agent: 'Agent 2b · Analyse LLM', time: alert.receivedAt, summary: 'Verdict · données masquées', delayMs: 1000 },
-      { id: 'notify', agent: 'Agent 3 · Notification', time: alert.receivedAt, summary: ticketId ? 'Ticket L2 rédigé · confirmation requise' : 'Pas d’escalade', delayMs: 700 },
+      { id: 'notify', agent: 'Agent 3 · Notification', time: alert.receivedAt, summary: ticket ? 'Ticket L2 envoyé · isolation non exécutée' : 'Pas d’escalade', delayMs: 700 },
     ],
-    ticket: ticketId
-      ? {
-          id: ticketId,
-          priority: alert.severity === 'CRITICAL' ? 'P1' : 'P2',
-          to: 'analystes.l2@checkout.internal',
-          subject: `[${alert.severity}] ${alert.type} — ${alert.asset}`,
-          summary: `Alerte ${alert.id} (${alert.source}). Contexte masqué avant LLM. Action recommandée, non exécutée.`,
-          actions: [
-            'Isoler le groupe de sécurité (validation L2)',
-            'Instantané disque si instance',
-            'Vérifier CloudTrail sur 24 h',
-          ],
-        }
-      : null,
+    ticket,
   }
 }
 
@@ -339,6 +511,7 @@ function reloadFromSnapshot() {
     agent.status = 'IDLE'
   })
   soc.currentAgentId = ''
+  soc.dashSlice = null
   applySnapshot()
 }
 
@@ -438,9 +611,14 @@ export async function launchWorkflow() {
   setAgent('notify', 'RUN')
   for (const alert of batch) {
     if (soc.stopped) return
+    if (DONE_STATUSES.includes(alert.status)) {
+      pushLog('notify', `${alert.id} · déjà classée · ${alert.agentLabel}`)
+      await sleep(120)
+      continue
+    }
     const outcome = classifyAlert(alert)
     if (outcome === 'ready') {
-      pushLog('notify', `${alert.id} · ticket L2 rédigé`, 'ok')
+      confirmL2Send(alert.caseId)
     } else {
       pushLog('notify', `${alert.id} · ${alert.agentLabel} · pas de ticket`)
     }
@@ -448,11 +626,14 @@ export async function launchWorkflow() {
   }
   if (!soc.stopped) {
     for (const alert of batch) sealCase(alert)
-    const ready = batch.filter((alert) =>
-      ['ready', 'awaiting_l2'].includes(alert.status),
-    ).length
-    setAgent('notify', ready ? 'OK' : 'IDLE')
-    pushLog('scheduler', `Lot terminé · ${ready} ticket(s) L2 · ${batch.length - ready} classée(s) L1`, 'ok')
+    const sent = batch.filter((alert) => alert.status === 'escalated').length
+    const closed = batch.length - sent
+    setAgent('notify', 'OK')
+    pushLog(
+      'scheduler',
+      `Lot terminé · ${sent} ticket(s) L2 envoyé(s) · ${closed} classée(s) L1`,
+      'ok',
+    )
   }
 
   soc.running = false
@@ -466,75 +647,48 @@ function sealCase(alert) {
   })
   item.played = true
   item.playing = false
-  if (item.ticket && (alert.status === 'ready' || alert.status === 'awaiting_l2')) {
-    alert.status = 'awaiting_l2'
-    alert.agentLabel = 'Attention L2'
-    item.hitl = 'pending'
-  } else {
-    item.hitl = 'idle'
-  }
-}
-
-export async function playCase(caseId) {
-  const item = soc.cases[caseId]
-  if (!item || item.playing || soc.stopped) return
-  if (item.played) return
-
-  const alert = soc.alerts.find((row) => row.caseId === caseId)
-  if (alert && alert.status !== 'new') {
-    sealCase(alert)
+  if (item.sent) {
+    item.hitl = 'notified'
     return
   }
+  if (alert.status === 'closed') item.hitl = 'l1'
+  else if (alert.status === 'false_positive') item.hitl = 'false_positive'
+  else item.hitl = 'idle'
+}
 
-  item.playing = true
-  pushLog('scheduler', `${item.alertId} · analyse du dossier`)
-
-  for (const step of item.steps) {
-    if (soc.stopped) {
-      item.playing = false
-      return
-    }
-    step.status = 'run'
-    const mapped =
-      step.id === 'mask' ? 'extract' : step.id === 'llm' ? 'llm' : step.id
-    if (['scheduler', 'extract', 'intel', 'llm', 'notify'].includes(mapped)) {
-      setAgent(mapped, 'RUN')
-    }
-    if (step.id === 'mask' && !soc.config.maskPii) {
-      pushLog('extract', `${item.alertId} · guardrail masquage forcé`, 'warn')
-    } else {
-      pushLog(
-        mapped === 'extract' && step.id === 'mask' ? 'extract' : mapped,
-        step.summary,
-      )
-    }
-    await sleep(step.delayMs || 600)
-    step.status = 'ok'
-    if (['scheduler', 'extract', 'intel', 'llm', 'notify'].includes(mapped)) {
-      setAgent(mapped, 'OK')
-    }
+export function ensureTicket(caseId) {
+  const item = soc.cases[caseId]
+  const alert = soc.alerts.find((row) => row.caseId === caseId)
+  if (!item || !alert) return null
+  if (!item.ticket) {
+    item.ticket = makeTicket(alert)
+    item.ticketId = item.ticket.id
   }
+  return item.ticket
+}
 
+export function treatAtL1(caseId) {
+  const item = soc.cases[caseId]
+  if (!item || item.sent || isL1Locked(caseId)) return
+  item.hitl = 'l1'
+  const alert = soc.alerts.find((row) => row.caseId === caseId)
   if (alert) {
-    alert.status = item.ticket ? 'awaiting_l2' : 'closed'
-    alert.agentLabel = item.ticket ? 'Attention L2' : 'Clos · L1'
+    alert.status = 'closed'
+    alert.agentLabel = 'Traité L1'
   }
-
-  item.played = true
-  item.playing = false
-  item.hitl = item.ticket ? 'pending' : 'idle'
+  pushLog('l1', `${item.alertId} · traité côté L1 · pas d’escalade`, 'ok')
 }
 
 export function markFalsePositive(caseId) {
   const item = soc.cases[caseId]
-  if (!item) return
+  if (!item || item.sent || isL1Locked(caseId)) return
   item.hitl = 'false_positive'
   const alert = soc.alerts.find((row) => row.caseId === caseId)
   if (alert) {
     alert.status = 'false_positive'
-    alert.agentLabel = 'FP L2'
+    alert.agentLabel = 'Faux positif'
   }
-  pushLog('notify', `${item.alertId} · classé faux positif L2`)
+  pushLog('l1', `${item.alertId} · classé faux positif`, 'ok')
 }
 
 export function inspectTicket(caseId) {
@@ -571,46 +725,7 @@ export function transmitL2Email(caseId) {
 export const pendingCount = computed(
   () =>
     soc.alerts.filter((alert) =>
-      ['new', 'ready', 'awaiting_l2', 'escalated'].includes(alert.status),
+      ['new', 'ready', 'awaiting_l2'].includes(alert.status),
     ).length,
 )
 
-export const liveKpis = computed(() => {
-  const alerts = soc.alerts
-  const total = alerts.length
-  const sources = {}
-  alerts.forEach((alert) => {
-    sources[alert.source] = (sources[alert.source] || 0) + 1
-  })
-  const sourceHint = Object.entries(sources)
-    .map(([name, count]) => `${count} ${name}`)
-    .join(' · ')
-  const highCrit = alerts.filter(
-    (alert) => alert.severity === 'HIGH' || alert.severity === 'CRITICAL',
-  ).length
-  const closedL1 = alerts.filter((alert) =>
-    ['ignored', 'false_positive', 'closed'].includes(alert.status),
-  ).length
-  const tickets = alerts.filter((alert) =>
-    ['ready', 'awaiting_l2', 'escalated'].includes(alert.status),
-  ).length
-  const waitingL2 = alerts.filter((alert) => alert.status === 'awaiting_l2').length
-  const lastIn = alerts[0]?.receivedAt || '—'
-
-  if (!soc.launched) {
-    return [
-      { label: 'File', value: String(total), hint: sourceHint || '—' },
-      { label: 'Haute priorité', value: String(highCrit), hint: 'HIGH · CRITICAL' },
-      { label: 'Dernière réception', value: lastIn, hint: 'arrivée la plus récente' },
-      { label: 'À ingérer', value: String(total), hint: 'en attente de triage' },
-    ]
-  }
-
-  const pct = total ? Math.round((closedL1 / total) * 100) : 0
-  return [
-    { label: 'File', value: String(total), hint: sourceHint || '—' },
-    { label: 'Classées L1', value: String(closedL1), hint: `${pct} % de la file` },
-    { label: 'Tickets L2', value: String(tickets), hint: waitingL2 ? `${waitingL2} en attente` : 'traités' },
-    { label: 'Dernière réception', value: lastIn, hint: 'arrivée la plus récente' },
-  ]
-})

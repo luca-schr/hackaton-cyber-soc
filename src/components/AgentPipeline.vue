@@ -26,7 +26,7 @@ defineProps({
         <div v-if="!compact" class="task">{{ agent.task }}</div>
       </div>
     </div>
-    <p v-if="compact && currentAgent" class="pipeline-now">
+    <p v-if="compact && currentAgent" :key="currentAgent.id" class="pipeline-now">
       En cours · {{ currentAgent.n }} {{ currentAgent.label }} — {{ currentAgent.task }}
     </p>
   </div>
