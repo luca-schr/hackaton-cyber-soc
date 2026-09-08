@@ -2,14 +2,15 @@ import { computed, reactive } from 'vue'
 import alertsDoc from '../data/alerts.json'
 import { lookupCmdb } from '../data/cmdb'
 import { bandFromScore } from '../data/architecture'
+import { generateAlert, resetLiveSeq } from '../data/generator'
 import { SEV_LABEL } from '../labels'
 
 const AGENT_DEFS = [
-  { id: 'scheduler', n: 'A4', label: 'Planificateur', task: 'Ingestion du flux' },
-  { id: 'extract', n: 'A1', label: 'Extraction', task: 'IP · agent · ressource' },
-  { id: 'intel', n: 'A2', label: 'Analyse', task: 'type · sévérité · ressource' },
-  { id: 'llm', n: 'A2b', label: 'Analyse LLM', task: 'Verdict masqué' },
-  { id: 'notify', n: 'A3', label: 'Notification', task: 'Ticket L2 · envoi' },
+  { id: 'scheduler', n: 'A4', label: 'Orchestrate', task: 'Ingestion du flux' },
+  { id: 'extract', n: 'A1', label: 'Extract', task: 'IP · agent · ressource' },
+  { id: 'intel', n: 'A2', label: 'Analyze', task: 'type · gravité · ressource' },
+  { id: 'llm', n: 'A2b', label: 'Analyze LLM', task: 'Verdict masqué' },
+  { id: 'notify', n: 'A3', label: 'Notify', task: 'Ticket L2 · envoi' },
 ]
 
 const SOURCE_MAP = {
@@ -22,6 +23,16 @@ const SOURCE_MAP = {
 let snapshot = null
 let logSeq = 0
 let clockTimer = null
+let ingestTimer = null
+let batchIds = new Set()
+const liveTreatTimers = new Set()
+
+const MAX_ALERTS = 36
+const INGEST_FIRST_MS = 1500
+const INGEST_MIN_MS = 10000
+const INGEST_MAX_MS = 16000
+const FRESH_MS = 22000
+const LIVE_TREAT_MS = 2000
 
 export const soc = reactive({
   loaded: false,
@@ -29,6 +40,7 @@ export const soc = reactive({
   running: false,
   stopped: false,
   launched: false,
+  autopilot: false,
   clock: '--:--:--',
   meta: {},
   kpis: {},
@@ -48,6 +60,8 @@ export const soc = reactive({
   loginBusy: false,
   bootstrapping: false,
   bootLabel: '',
+  ingestOn: false,
+  lastArrival: null,
 })
 
 function clone(value) {
@@ -71,13 +85,14 @@ function formatClock(date = new Date()) {
   return date.toLocaleTimeString('fr-FR', { hour12: false })
 }
 
-export function pushLog(agent, message, level = 'info') {
+export function pushLog(agent, message, level = 'info', kind = '') {
   soc.logs.unshift({
     id: ++logSeq,
     time: soc.clock === '--:--:--' ? formatClock() : soc.clock,
     agent,
     message,
     level,
+    kind: kind || (level === 'warn' ? 'warn' : 'info'),
   })
   if (soc.logs.length > 80) soc.logs.pop()
 }
@@ -89,6 +104,63 @@ export function startClock() {
   }
   tick()
   clockTimer = setInterval(tick, 1000)
+}
+
+function ingestDelay() {
+  return INGEST_MIN_MS + Math.floor(Math.random() * (INGEST_MAX_MS - INGEST_MIN_MS))
+}
+
+function ingestOne() {
+  if (!soc.loggedIn || !soc.ingestOn || soc.alerts.length >= MAX_ALERTS) return
+  const alert = normalizeAlert(generateAlert())
+  const now = Date.now()
+  alert.live = true
+  alert.fresh = true
+  alert.receivedAtMs = now
+  alert.receivedAt = formatClock(new Date(now))
+  alert.agentLabel = soc.autopilot ? 'Traitement…' : 'En attente'
+  soc.cases[alert.caseId] = hydrateCase(stubCase(alert))
+  soc.alerts.unshift(alert)
+  soc.lastArrival = {
+    id: alert.id,
+    severity: alert.severity,
+    source: alert.source,
+    asset: alert.asset,
+    at: alert.receivedAt,
+  }
+  pushLog(
+    'scheduler',
+    `Arrivée · ${alert.id} · ${SEV_LABEL[alert.severity]} · ${alert.source} · ${alert.asset}`,
+    'ok',
+    'arrival',
+  )
+  if (soc.autopilot && !soc.stopped) scheduleLiveTreat(alert)
+  window.setTimeout(() => {
+    if (alert.fresh) alert.fresh = false
+  }, FRESH_MS)
+}
+
+function scheduleIngest(delay) {
+  if (ingestTimer) window.clearTimeout(ingestTimer)
+  ingestTimer = window.setTimeout(() => {
+    ingestOne()
+    if (soc.ingestOn) scheduleIngest(ingestDelay())
+  }, delay)
+}
+
+export function startIngest() {
+  if (!soc.loggedIn) return
+  soc.ingestOn = true
+  if (ingestTimer) return
+  scheduleIngest(INGEST_FIRST_MS)
+}
+
+export function stopIngest() {
+  soc.ingestOn = false
+  if (ingestTimer) {
+    window.clearTimeout(ingestTimer)
+    ingestTimer = null
+  }
 }
 
 export function loadData() {
@@ -146,10 +218,9 @@ export const queuedAlerts = computed(() => {
   return soc.alerts.filter((alert) => alert.source === source)
 })
 
-const SEV_RANK = { CRITICAL: 0, HIGH: 1, MEDIUM: 2, LOW: 3 }
-const L1_DONE = ['ignored', 'false_positive', 'closed']
-const L2_STATUSES = ['ready', 'awaiting_l2', 'escalated']
 const DONE_STATUSES = ['ignored', 'false_positive', 'closed', 'escalated']
+
+export const LIST_LIMIT = 8
 
 export function clearDashSlice() {
   soc.dashSlice = null
@@ -165,18 +236,7 @@ export function toggleDashSlice(widgetId, key) {
 }
 
 function sortQueue(alerts) {
-  return [...alerts].sort((a, b) => {
-    if (a.star !== b.star) return a.star ? -1 : 1
-    const gap = (SEV_RANK[a.severity] ?? 9) - (SEV_RANK[b.severity] ?? 9)
-    if (gap !== 0) return gap
-    return b.score - a.score
-  })
-}
-
-function pathBucket(alert) {
-  if (L1_DONE.includes(alert.status)) return 'l1'
-  if (L2_STATUSES.includes(alert.status)) return 'l2'
-  return 'file'
+  return [...alerts].sort((a, b) => (b.receivedAtMs || 0) - (a.receivedAtMs || 0))
 }
 
 function sourceWidget(alerts) {
@@ -190,6 +250,7 @@ function sourceWidget(alerts) {
     label: 'File',
     value: String(alerts.length),
     slices: [
+      { key: 'all', label: 'Tous', n: alerts.length, color: '#bbbbbb', skipPie: true },
       { key: 'GuardDuty', label: 'GuardDuty', n: sources.GuardDuty || 0, color: '#00dfff' },
       { key: 'WAF', label: 'WAF', n: sources.WAF || 0, color: '#3a00f9' },
       { key: 'SIEM', label: 'SIEM', n: sources.SIEM || 0, color: '#15fd00' },
@@ -206,11 +267,12 @@ function severityWidget(alerts) {
     id: 'severity',
     type: 'pie',
     label: 'Gravité',
-    value: String(sevs.CRITICAL + sevs.HIGH),
+    value: String(alerts.length),
     slices: [
       { key: 'CRITICAL', label: SEV_LABEL.CRITICAL, n: sevs.CRITICAL, color: '#ef4444' },
       { key: 'HIGH', label: SEV_LABEL.HIGH, n: sevs.HIGH, color: '#f97316' },
-      { key: 'other', label: 'Autres', n: sevs.MEDIUM + sevs.LOW, color: '#9ca3af' },
+      { key: 'MEDIUM', label: SEV_LABEL.MEDIUM, n: sevs.MEDIUM, color: '#eab308' },
+      { key: 'LOW', label: SEV_LABEL.LOW, n: sevs.LOW, color: '#9ca3af' },
     ],
   }
 }
@@ -223,7 +285,7 @@ function scoreWidget(alerts) {
   return {
     id: 'score',
     type: 'pie',
-    label: 'Score A2',
+    label: 'Priorité A2',
     value: String(bands.p1 + bands.p2),
     defaultKey: 'p1',
     slices: [
@@ -234,46 +296,50 @@ function scoreWidget(alerts) {
   }
 }
 
-function pathWidget(alerts) {
-  const buckets = { l1: 0, l2: 0, file: 0 }
-  alerts.forEach((alert) => {
-    buckets[pathBucket(alert)] += 1
-  })
+function isDoneAlert(alert) {
+  if (DONE_STATUSES.includes(alert.status)) return true
+  return Boolean(soc.cases[alert.caseId]?.sent)
+}
+
+function treatWidget(alerts) {
+  const total = alerts.length
+  const done = alerts.filter(isDoneAlert).length
+  const todo = Math.max(total - done, 0)
+  const pct = total ? Math.round((done / total) * 100) : 0
   return {
-    id: 'path',
+    id: 'treat',
     type: 'pie',
-    label: 'Parcours',
-    value: String(buckets.l1 + buckets.l2),
-    defaultKey: soc.launched ? 'l2' : 'file',
+    label: 'Traitement',
+    value: `${pct}%`,
+    defaultKey: 'done',
     slices: [
-      { key: 'l1', label: 'L1', n: buckets.l1, color: '#15fd00' },
-      { key: 'l2', label: 'L2', n: buckets.l2, color: '#ef4444' },
-      { key: 'file', label: 'File', n: buckets.file, color: '#00dfff' },
+      { key: 'done', label: 'Traitées', n: done, color: '#15fd00' },
+      { key: 'todo', label: 'En file', n: todo, color: '#00dfff' },
     ],
   }
 }
-
 function matchesDashSlice(alert, slice) {
   if (!slice) return true
   const { widgetId, key } = slice
   if (widgetId === 'source') return alert.source === key
-  if (widgetId === 'severity') {
-    if (key === 'other') return alert.severity === 'MEDIUM' || alert.severity === 'LOW'
-    return alert.severity === key
-  }
+  if (widgetId === 'severity') return alert.severity === key
   if (widgetId === 'score') return bandFromScore(alert.score).id === key
-  if (widgetId === 'path') return pathBucket(alert) === key
+  if (widgetId === 'treat') return key === 'done' ? isDoneAlert(alert) : !isDoneAlert(alert)
   return true
 }
 
 export const dashboardWidgets = computed(() => {
   const alerts = queuedAlerts.value
-  return [sourceWidget(alerts), severityWidget(alerts), scoreWidget(alerts), pathWidget(alerts)]
+  return [sourceWidget(alerts), severityWidget(alerts), scoreWidget(alerts), treatWidget(alerts)]
 })
 
 export const drillAlerts = computed(() =>
   sortQueue(queuedAlerts.value.filter((alert) => matchesDashSlice(alert, soc.dashSlice))),
 )
+
+function visibleHint(n) {
+  return `Aperçu ${Math.min(LIST_LIMIT, n)} sur ${n}`
+}
 
 export const dashTableMeta = computed(() => {
   const n = drillAlerts.value.length
@@ -285,33 +351,60 @@ export const dashTableMeta = computed(() => {
     const name = part?.label || slice.key
     return {
       title: `${widget?.label || 'Filtre'} · ${name}`,
-      hint: 'Cas derrière le chiffre. Clic pour ouvrir le dossier.',
+      hint: `${visibleHint(n)} · cas derrière le chiffre.`,
       count: n,
     }
   }
   return {
     title: 'File',
-    hint: 'Clic widget pour filtrer, clic ligne pour ouvrir le dossier.',
+    hint: `${visibleHint(n)} dans le périmètre. Clic widget pour filtrer.`,
     count: n,
   }
 })
+
+function clearLiveTreats() {
+  liveTreatTimers.forEach((id) => clearTimeout(id))
+  liveTreatTimers.clear()
+}
+
+function scheduleLiveTreat(alert) {
+  const id = window.setTimeout(() => {
+    liveTreatTimers.delete(id)
+    treatLiveAlert(alert)
+  }, LIVE_TREAT_MS)
+  liveTreatTimers.add(id)
+}
+
+function treatLiveAlert(alert) {
+  if (!alert || soc.stopped || !soc.autopilot) return
+  if (DONE_STATUSES.includes(alert.status)) return
+  if (batchIds.has(alert.id)) return
+  const outcome = classifyAlert(alert)
+  if (outcome === 'ready') confirmL2Send(alert.caseId)
+  sealCase(alert)
+  pushLog('notify', `${alert.id} · traité en 2 s · ${alert.agentLabel}`, 'ok', 'treat')
+}
+
+function stampTreated(alert, status, label) {
+  if (!alert) return
+  alert.status = status
+  if (label) alert.agentLabel = label
+  alert.treatedAtMs = Date.now()
+}
 
 function classifyAlert(alert) {
   if (DONE_STATUSES.includes(alert.status)) return alert.status
   const item = soc.cases[alert.caseId]
   if (!item) {
-    alert.status = 'ignored'
-    alert.agentLabel = 'Sans dossier'
+    stampTreated(alert, 'ignored', 'Sans dossier')
     return 'ignored'
   }
   if (alert.severity === 'LOW') {
-    alert.status = 'ignored'
-    alert.agentLabel = 'Ignoré L1'
+    stampTreated(alert, 'ignored', 'Ignoré L1')
     return 'ignored'
   }
   if (!item.ticket) {
-    alert.status = 'false_positive'
-    alert.agentLabel = 'FP classé'
+    stampTreated(alert, 'false_positive', 'FP classé')
     return 'false_positive'
   }
   alert.status = 'ready'
@@ -425,7 +518,10 @@ function normalizeAlert(raw, index) {
     status: 'new',
     agentLabel: 'En attente',
     receivedAt: formatClock(),
+    receivedAtMs: Date.now(),
     star: Boolean(raw.star),
+    live: Boolean(raw.live),
+    treatedAtMs: 0,
     ip: raw.ip || raw.sourceIp || null,
     cmdb: lookupCmdb(raw.asset || raw.resource || 'inconnu'),
   }
@@ -492,7 +588,9 @@ function stampArrivals(alerts) {
   const now = Date.now()
   alerts.forEach((alert, index) => {
     const offset = ARRIVAL_OFFSETS_SEC[index] ?? index * 97 + 23
-    alert.receivedAt = formatClock(new Date(now - offset * 1000))
+    const at = now - offset * 1000
+    alert.receivedAtMs = at
+    alert.receivedAt = formatClock(new Date(at))
   })
 }
 
@@ -504,6 +602,9 @@ function reloadFromSnapshot() {
   soc.stopped = false
   soc.running = false
   soc.launched = false
+  soc.autopilot = false
+  batchIds = new Set()
+  clearLiveTreats()
   soc.sentTickets = []
   soc.logs = []
   logSeq = 0
@@ -512,12 +613,16 @@ function reloadFromSnapshot() {
   })
   soc.currentAgentId = ''
   soc.dashSlice = null
+  soc.lastArrival = null
   applySnapshot()
 }
 
 export function stopPipeline() {
   soc.stopped = true
   soc.running = false
+  soc.autopilot = false
+  batchIds = new Set()
+  clearLiveTreats()
   soc.agents.forEach((agent) => {
     agent.status = 'STOP'
   })
@@ -525,12 +630,15 @@ export function stopPipeline() {
 }
 
 export function resetDemo() {
+  stopIngest()
+  resetLiveSeq()
   const alerts = clone(snapshot.alerts)
   stampArrivals(alerts)
   snapshot.alerts = alerts
   snapshot.cases = casesFromAlerts(alerts)
   reloadFromSnapshot()
   pushLog('scheduler', 'Session réinitialisée — file rechargée', 'ok')
+  if (soc.loggedIn) startIngest()
 }
 
 export async function loginDemo() {
@@ -552,17 +660,31 @@ export async function loginDemo() {
   soc.loggedIn = true
   soc.bootstrapping = false
   soc.bootLabel = ''
+  startIngest()
 }
 
 export async function launchWorkflow() {
-  if (soc.running || soc.stopped) return
-  soc.running = true
+  if (soc.running) return
+  if (soc.stopped) {
+    soc.stopped = false
+    soc.agents.forEach((agent) => {
+      agent.status = 'IDLE'
+    })
+    soc.currentAgentId = ''
+  }
+  soc.autopilot = true
   soc.launched = true
-  const batch = queuedAlerts.value
+  const batch = untreatedQueued.value.slice()
+  if (!batch.length) {
+    pushLog('scheduler', 'Workflow actif. Les nouvelles alertes sont traitées en 2 s.', 'ok')
+    return
+  }
+  soc.running = true
+  batchIds = new Set(batch.map((alert) => alert.id))
 
   pushLog(
     'scheduler',
-    `Ingestion ${soc.config.source} · ${batch.length} alerte(s)`,
+    `Workflow actif · lot ${batch.length} · les nouvelles seront traitées en 2 s.`,
     'ok',
   )
   setAgent('scheduler', 'RUN')
@@ -620,7 +742,7 @@ export async function launchWorkflow() {
     if (outcome === 'ready') {
       confirmL2Send(alert.caseId)
     } else {
-      pushLog('notify', `${alert.id} · ${alert.agentLabel} · pas de ticket`)
+      pushLog('notify', `${alert.id} · ${alert.agentLabel} · pas de ticket`, 'ok', 'treat')
     }
     await sleep(220)
   }
@@ -631,11 +753,13 @@ export async function launchWorkflow() {
     setAgent('notify', 'OK')
     pushLog(
       'scheduler',
-      `Lot terminé · ${sent} ticket(s) L2 envoyé(s) · ${closed} classée(s) L1`,
+      `Lot terminé · ${sent} ticket(s) L2 envoyé(s) · ${closed} classée(s) L1 · mode live ON`,
       'ok',
     )
+    untreatedQueued.value.forEach((alert) => scheduleLiveTreat(alert))
   }
 
+  batchIds = new Set()
   soc.running = false
 }
 
@@ -672,11 +796,8 @@ export function treatAtL1(caseId) {
   if (!item || item.sent || isL1Locked(caseId)) return
   item.hitl = 'l1'
   const alert = soc.alerts.find((row) => row.caseId === caseId)
-  if (alert) {
-    alert.status = 'closed'
-    alert.agentLabel = 'Traité L1'
-  }
-  pushLog('l1', `${item.alertId} · traité côté L1 · pas d’escalade`, 'ok')
+  if (alert) stampTreated(alert, 'closed', 'Traité L1')
+  pushLog('l1', `${item.alertId} · traité côté L1 · pas d’escalade`, 'ok', 'treat')
 }
 
 export function markFalsePositive(caseId) {
@@ -684,11 +805,8 @@ export function markFalsePositive(caseId) {
   if (!item || item.sent || isL1Locked(caseId)) return
   item.hitl = 'false_positive'
   const alert = soc.alerts.find((row) => row.caseId === caseId)
-  if (alert) {
-    alert.status = 'false_positive'
-    alert.agentLabel = 'Faux positif'
-  }
-  pushLog('l1', `${item.alertId} · classé faux positif`, 'ok')
+  if (alert) stampTreated(alert, 'false_positive', 'Faux positif')
+  pushLog('l1', `${item.alertId} · classé faux positif`, 'ok', 'treat')
 }
 
 export function inspectTicket(caseId) {
@@ -696,10 +814,7 @@ export function inspectTicket(caseId) {
   if (!item?.ticket || !item.sent) return
   item.hitl = 'notified'
   const alert = soc.alerts.find((row) => row.caseId === caseId)
-  if (alert && ['ready', 'awaiting_l2'].includes(alert.status)) {
-    alert.status = 'escalated'
-    alert.agentLabel = 'Ticket L2'
-  }
+  if (alert) stampTreated(alert, 'escalated', 'Ticket L2')
 }
 
 export function confirmL2Send(caseId) {
@@ -719,13 +834,22 @@ export function transmitL2Email(caseId) {
     caseId,
     at: soc.clock === '--:--:--' ? formatClock() : soc.clock,
   })
-  pushLog('notify', `${item.ticket.id} · e-mail L2 transmis`, 'ok')
+  pushLog('notify', `${item.ticket.id} · e-mail L2 transmis`, 'ok', 'treat')
 }
+
+export const untreatedQueued = computed(() =>
+  queuedAlerts.value.filter((alert) => {
+    if (DONE_STATUSES.includes(alert.status)) return false
+    return !soc.cases[alert.caseId]?.sent
+  }),
+)
 
 export const pendingCount = computed(
   () =>
-    soc.alerts.filter((alert) =>
-      ['new', 'ready', 'awaiting_l2'].includes(alert.status),
-    ).length,
+    soc.alerts.filter((alert) => {
+      if (DONE_STATUSES.includes(alert.status)) return false
+      if (soc.cases[alert.caseId]?.sent) return false
+      return ['new', 'ready', 'awaiting_l2'].includes(alert.status)
+    }).length,
 )
 

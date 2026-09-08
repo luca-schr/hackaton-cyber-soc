@@ -1,13 +1,21 @@
 <script setup>
-import { onMounted } from 'vue'
-import { launchWorkflow, loadData, loginDemo, pendingCount, resetDemo, soc, startClock } from './store/soc'
+import { onMounted, watch } from 'vue'
+import { launchWorkflow, loadData, loginDemo, pendingCount, resetDemo, soc, startClock, startIngest } from './store/soc'
 import AgentClock from './components/AgentClock.vue'
 import AgentPipeline from './components/AgentPipeline.vue'
 
 onMounted(() => {
   startClock()
   loadData()
+  if (soc.loggedIn) startIngest()
 })
+
+watch(
+  () => soc.loggedIn,
+  (on) => {
+    if (on) startIngest()
+  },
+)
 
 function launchAgents() {
   launchWorkflow()
@@ -67,15 +75,18 @@ function launchAgents() {
       </nav>
     </aside>
     <div class="main">
-      <div class="agent-bar" :class="{ 'is-run': soc.running, 'is-ok': soc.launched && !soc.running && !soc.stopped }">
+      <div class="agent-bar" :class="{ 'is-run': soc.running || (soc.autopilot && !soc.stopped), 'is-ok': soc.launched && !soc.running && !soc.autopilot && !soc.stopped }">
         <AgentPipeline compact />
         <button
           class="btn primary agent-launch"
           type="button"
-          :disabled="soc.running || soc.stopped || soc.launched || !soc.alerts.length"
+          :class="{ 'is-live': soc.autopilot && !soc.stopped }"
+          :disabled="soc.running"
+          title="Lancer ou relancer le pipeline"
           @click="launchAgents"
         >
-          <svg viewBox="0 0 16 16" width="11" height="11" aria-hidden="true">
+          <span v-if="soc.autopilot && !soc.stopped" class="launch-spin" aria-hidden="true"></span>
+          <svg v-else viewBox="0 0 16 16" width="11" height="11" aria-hidden="true">
             <path fill="currentColor" d="M4.2 2.4v11.2L13.4 8 4.2 2.4z" />
           </svg>
           AI Workflow

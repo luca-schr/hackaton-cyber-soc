@@ -9,7 +9,12 @@ defineProps({
 
 <template>
   <div class="logs">
-    <div v-for="row in rows.slice(0, limit)" :key="row.id" class="log-line" :class="'log-' + row.level">
+    <div
+      v-for="row in rows.slice(0, limit)"
+      :key="row.id"
+      class="log-line"
+      :class="['log-' + row.level, 'log-kind-' + (row.kind || 'info')]"
+    >
       <span class="mono">{{ row.time }}</span>
       <span class="log-agent">{{ LOG_AGENT[row.agent] || row.agent }}</span>
       <span>{{ row.message }}</span>

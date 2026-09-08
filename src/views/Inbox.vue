@@ -2,11 +2,9 @@
 import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ALERT_STATUS, CRIT_LABEL, SEV_LABEL } from '../labels'
-import { soc } from '../store/soc'
+import { LIST_LIMIT, soc } from '../store/soc'
 
 const router = useRouter()
-const OPEN_STATUSES = ['new', 'ready', 'awaiting_l2']
-const TREATED_STATUSES = ['ignored', 'false_positive', 'closed', 'escalated']
 
 const severity = ref('ALL')
 const source = ref('ALL')
@@ -23,13 +21,25 @@ function matchesFilters(alert) {
   return true
 }
 
+function isTreated(alert) {
+  if (['ignored', 'false_positive', 'closed', 'escalated'].includes(alert.status)) return true
+  return Boolean(soc.cases[alert.caseId]?.sent)
+}
+
 const openAlerts = computed(() =>
-  soc.alerts.filter((alert) => matchesFilters(alert) && OPEN_STATUSES.includes(alert.status)),
+  soc.alerts
+    .filter((alert) => matchesFilters(alert) && !isTreated(alert))
+    .sort((a, b) => (b.receivedAtMs || 0) - (a.receivedAtMs || 0)),
 )
 
 const treatedAlerts = computed(() =>
-  soc.alerts.filter((alert) => matchesFilters(alert) && TREATED_STATUSES.includes(alert.status)),
+  soc.alerts
+    .filter((alert) => matchesFilters(alert) && isTreated(alert))
+    .sort((a, b) => (b.treatedAtMs || b.receivedAtMs || 0) - (a.treatedAtMs || a.receivedAtMs || 0)),
 )
+
+const visibleOpen = computed(() => openAlerts.value.slice(0, LIST_LIMIT))
+const visibleTreated = computed(() => treatedAlerts.value.slice(0, LIST_LIMIT))
 
 const selected = computed(
   () =>
@@ -52,13 +62,16 @@ function openCase() {
   <div class="page">
     <h1>Alerts · {{ openAlerts.length }} en file</h1>
     <div v-if="!soc.launched" class="banner">
-      Vous pouvez diagnostiquer une alerte et décider en L1. Le workflow agentique n’a pas encore tourné.
+      Vous pouvez diagnostiquer une alerte et décider en L1. Le flux arrive en arrière-plan.
     </div>
-    <div v-else-if="soc.running" class="banner warn">
-      Agents en cours. Classement L1 et envoi des tickets L2.
+    <div v-else-if="soc.stopped" class="banner">
+      Pipeline arrêté. Aucun contenu brut envoyé.
+    </div>
+    <div v-else-if="soc.autopilot" class="banner">
+      Workflow actif. Chaque nouvelle alerte est traitée en 2 s. Isolation non exécutée.
     </div>
     <div v-else class="banner">
-      File classée. Tickets L2 envoyés. Isolation non exécutée.
+      File du périmètre classée. Tickets L2 envoyés. Isolation non exécutée.
     </div>
 
     <section class="panel filters">
@@ -90,9 +103,9 @@ function openCase() {
       </div>
     </section>
 
-    <div class="split">
+    <div class="alerts-wide">
       <section class="panel">
-        <h2>File ouverte</h2>
+        <h2>File ouverte · aperçu {{ visibleOpen.length }} sur {{ openAlerts.length }}</h2>
         <table>
           <thead>
             <tr>
@@ -107,10 +120,10 @@ function openCase() {
           </thead>
           <tbody>
             <tr
-              v-for="alert in openAlerts"
+              v-for="alert in visibleOpen"
               :key="alert.id"
               class="clickable"
-              :class="{ selected: selected?.id === alert.id, star: alert.star }"
+              :class="{ selected: selected?.id === alert.id, fresh: alert.fresh }"
               @click="selectedId = alert.id"
             >
               <td class="mono">{{ alert.id }}</td>
@@ -173,7 +186,7 @@ function openCase() {
     </div>
 
     <section class="panel">
-      <h2>Alertes traitées · {{ treatedAlerts.length }}</h2>
+      <h2>Alertes traitées · aperçu {{ visibleTreated.length }} sur {{ treatedAlerts.length }}</h2>
       <p class="meta" style="margin: 0 0 8px">
         Classées L1 (bruit, FP, traité) ou ticket L2 envoyé. Isolation jamais exécutée.
       </p>
@@ -191,7 +204,7 @@ function openCase() {
         </thead>
         <tbody>
           <tr
-            v-for="alert in treatedAlerts"
+            v-for="alert in visibleTreated"
             :key="alert.id"
             class="clickable"
             :class="{ selected: selected?.id === alert.id }"

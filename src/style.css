@@ -175,6 +175,24 @@ a {
   flex-shrink: 0;
 }
 
+.agent-launch.is-live,
+.agent-launch.is-live:disabled {
+  background: var(--ok);
+  border-color: var(--ok);
+  color: #242424;
+  opacity: 1;
+}
+
+.launch-spin {
+  width: 11px;
+  height: 11px;
+  border: 2px solid rgba(36, 36, 36, 0.28);
+  border-top-color: #242424;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+  flex-shrink: 0;
+}
+
 .agent-bar .agent-clock {
   text-transform: none;
   color: #00dfff;
@@ -254,14 +272,22 @@ a {
 }
 
 .kpis {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  display: flex;
+  flex-wrap: wrap;
   gap: 8px;
   margin-top: 10px;
 }
 
-.kpis-4 {
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+.kpis > .kpi {
+  flex: 1 1 calc(50% - 4px);
+  min-width: min(100%, 280px);
+}
+
+@media (min-width: 1280px) {
+  .kpis-4 > .kpi {
+    flex: 1 1 calc(25% - 6px);
+    min-width: min(100%, 220px);
+  }
 }
 
 .kpi {
@@ -277,9 +303,17 @@ a {
 .kpi-chart {
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
+  align-items: stretch;
   gap: 10px;
   padding: 10px 12px 10px;
+}
+
+.kpi-body {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
 }
 
 .kpi-donut-btn {
@@ -326,7 +360,7 @@ a {
   inset: 10px;
   display: grid;
   place-items: center;
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 600;
   line-height: 1;
   pointer-events: none;
@@ -337,9 +371,12 @@ a {
   margin: 0;
   padding: 0;
   display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-start;
-  gap: 4px 10px;
+  flex-direction: column;
+  justify-content: space-between;
+  align-self: stretch;
+  flex: 1;
+  min-width: 0;
+  gap: 4px;
   font-size: 11px;
   color: var(--muted);
   line-height: 1.2;
@@ -348,8 +385,16 @@ a {
 .kpi-legend li {
   display: flex;
   align-items: center;
-  gap: 4px;
+  justify-content: space-between;
+  gap: 8px;
   cursor: pointer;
+}
+
+.kpi-legend-pin {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
 }
 
 .kpi-legend i {
@@ -702,8 +747,20 @@ tr.selected {
   background: var(--panel-2);
 }
 
-tr.star td:first-child {
-  box-shadow: inset 3px 0 0 var(--sev-crit);
+tr.fresh {
+  animation: ingest-flash 2.6s ease;
+}
+
+.mark {
+  margin-left: 6px;
+  text-transform: none;
+  letter-spacing: 0.02em;
+  vertical-align: middle;
+}
+
+@keyframes ingest-flash {
+  from { background: #163038; }
+  to { background: transparent; }
 }
 
 .sev {
@@ -732,6 +789,29 @@ tr.star td:first-child {
   display: grid;
   grid-template-columns: 1.15fr 0.85fr;
   gap: 10px;
+}
+
+.alerts-wide {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  width: 100%;
+  align-items: stretch;
+}
+
+.alerts-wide > :first-child {
+  flex: 3 1 0;
+  min-width: 0;
+}
+
+.alerts-wide > :last-child {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.alerts-wide .kv {
+  width: 100%;
+  grid-template-columns: 92px minmax(0, 1fr);
 }
 
 .timeline {
@@ -957,20 +1037,52 @@ tr.star td:first-child {
   gap: 10px;
   font-size: 12px;
   color: var(--text);
+  border-left: 3px solid transparent;
+  padding-left: 8px;
 }
 
 .log-agent {
-  color: var(--info);
+  color: var(--muted);
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
 
-.log-warn {
+.log-kind-arrival {
+  border-left-color: var(--info);
+}
+
+.log-kind-arrival .log-agent,
+.log-kind-arrival {
   color: var(--info);
 }
 
-.log-ok .log-agent {
+.log-kind-treat {
+  border-left-color: var(--ok);
+}
+
+.log-kind-treat .log-agent,
+.log-kind-treat {
   color: var(--ok);
+}
+
+.log-kind-warn {
+  border-left-color: var(--sev-high);
+  color: var(--sev-high);
+}
+
+.log-key.arrival {
+  color: var(--info);
+  border-color: var(--info);
+}
+
+.log-key.treat {
+  color: var(--ok);
+  border-color: var(--ok);
+}
+
+.log-key.warn {
+  color: var(--sev-high);
+  border-color: var(--sev-high);
 }
 
 .login-screen {
@@ -1116,10 +1228,19 @@ tr.star td:first-child {
     grid-column: 1 / -1;
     justify-self: start;
   }
-  .kpis,
-  .kpis-4,
+  .kpis > .kpi,
+  .kpis-4 > .kpi {
+    flex: 1 1 100%;
+  }
   .split,
   .compare {
     grid-template-columns: 1fr;
+  }
+  .alerts-wide {
+    flex-direction: column;
+  }
+  .alerts-wide > :first-child,
+  .alerts-wide > :last-child {
+    flex: 1 1 auto;
   }
 }

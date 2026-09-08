@@ -11,10 +11,12 @@ const R = 13.9
 const C = 2 * Math.PI * R
 
 const arcs = computed(() => {
-  const sum = props.slices.reduce((total, slice) => total + slice.n, 0) || 1
+  const sum = props.slices
+    .filter((slice) => !slice.skipPie)
+    .reduce((total, slice) => total + slice.n, 0) || 1
   let offset = C / 4
   return props.slices
-    .filter((slice) => slice.n > 0)
+    .filter((slice) => slice.n > 0 && !slice.skipPie)
     .map((slice) => {
       const len = (slice.n / sum) * C
       const arc = {

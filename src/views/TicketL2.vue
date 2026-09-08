@@ -87,7 +87,7 @@ async function copyTicket() {
         <button class="btn" @click="copyTicket">
           {{ copied ? 'Ticket copié' : 'Copier le ticket' }}
         </button>
-        <router-link class="btn" :to="`/cases/${route.params.id}`">Retour au dossier</router-link>
+        <router-link class="btn" to="/alerts">Retour aux alertes</router-link>
       </div>
     </section>
   </div>

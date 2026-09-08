@@ -6,7 +6,7 @@ import { ARCH_AGENTS, SCORE_BANDS } from '../data/architecture'
 import { soc, stopPipeline } from '../store/soc'
 
 const router = useRouter()
-const workflowOn = computed(() => soc.launched || soc.running)
+const workflowOn = computed(() => soc.launched || soc.running || soc.autopilot)
 
 function openTicket(row) {
   router.push(`/tickets/${row.caseId}`)
@@ -25,14 +25,17 @@ function liveStatus(ids) {
   <div class="page">
     <h1>{{ workflowOn ? 'Control, pipeline agents' : 'Control, politique SOC' }}</h1>
 
-    <div class="banner" v-if="!soc.launched && !soc.running">
+    <div class="banner" v-if="!soc.launched && !soc.running && !soc.autopilot">
       Workflow IA inactif. Diagnostic L1 manuel. Lancez AI Workflow dans la barre.
     </div>
     <div class="banner warn" v-else-if="soc.running">
-      Agents en cours. Masquage A1, score A2, ticket A3 propose. Isolation non executee.
+      Lot initial en cours. Les nouvelles alertes seront traitees en 2 s. Isolation non executee.
     </div>
     <div class="banner" v-else-if="soc.stopped">
       Pipeline arrete. Aucun contenu brut envoye.
+    </div>
+    <div class="banner" v-else-if="soc.autopilot">
+      Workflow actif. Chaque nouvelle alerte est traitee en 2 s. Isolation non executee.
     </div>
     <div class="banner" v-else>
       Workflow IA termine. Tickets L2 envoyes. Isolation non executee.
@@ -63,12 +66,6 @@ function liveStatus(ids) {
             <span v-for="model in agent.models" :key="model" class="pill model-badge">{{ model }}</span>
           </div>
           <p>{{ agent.task }}</p>
-          <div class="kv">
-            <span>Entree</span>
-            <code>{{ agent.input }}</code>
-            <span>Sortie</span>
-            <code>{{ agent.output }}</code>
-          </div>
         </article>
       </div>
     </section>
